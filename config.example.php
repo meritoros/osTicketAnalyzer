@@ -55,5 +55,18 @@ return [
     'app' => [
         'title'    => 'osTicket — Statystyki',
         'timezone' => 'Europe/Warsaw',
+        // Logo w nagłówku. Domyślnie z sieci Meritoros; można podmienić na
+        // lokalny plik: 'assets/logo.png'. Puste = brak logo.
+        'logo_url' => 'https://pulpit.meritoros.pl/img/client/meritoros.png',
+        // Domyślny dział zaznaczony w filtrze listy pracowników.
+        'default_department' => 'IT/RPA',
+    ],
+
+    // --- Ocena ticketa (gwiazdki) ------------------------------------------
+    'rating' => [
+        // Kolumna w ost_ticket__cdata z oceną (ciąg gwiazdek — liczymy znaki,
+        // albo liczba). PUSTE = automatyczne wykrycie po nazwie/etykiecie pola
+        // (ocena / gwiazdki / rating / star). Sprawdź w diagnostyce, co wykryto.
+        'field' => getenv('OSTA_RATING_FIELD') ?: '',
     ],
 ];

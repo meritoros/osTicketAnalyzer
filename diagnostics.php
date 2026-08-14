@@ -55,6 +55,8 @@ $tables     = [];
 $priorities = [];
 $statuses   = [];
 $prioritySrc = null;
+$ratingField = null;
+$formFields  = [];
 
 if ($fatal === null) {
     try {
@@ -63,6 +65,8 @@ if ($fatal === null) {
         $priorities  = schema_priorities();
         $statuses    = schema_statuses();
         $prioritySrc = schema_priority_source();
+        $ratingField = schema_rating_field();
+        $formFields  = schema_form_fields();
         if (empty($tables[tbl('ticket')])) {
             $guessed = schema_guess_prefix();
         }
@@ -175,6 +179,35 @@ if ($fatal === null) {
                 </table>
             <?php else: ?>
                 <p class="error">Brak danych o statusach.</p>
+            <?php endif; ?>
+        </section>
+
+        <section class="card">
+            <h2>Ocena ticketu (gwiazdki)</h2>
+            <?php if ($ratingField !== null): ?>
+                <p>Wykryte pole oceny w <code><?= h(tbl('ticket__cdata')) ?></code>:
+                   <code><?= h($ratingField) ?></code> ✔</p>
+            <?php else: ?>
+                <div class="banner warn">
+                    Nie wykryto pola z oceną. Znajdź poniżej pole z gwiazdkami i wpisz jego
+                    <strong>nazwę</strong> (kolumna) w <code>config.php</code> → <code>rating.field</code>.
+                </div>
+            <?php endif; ?>
+            <?php if ($formFields): ?>
+                <table class="grid">
+                    <thead><tr><th>name (kolumna)</th><th>etykieta</th><th>typ</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($formFields as $f): ?>
+                        <tr>
+                            <td><code><?= h($f['name']) ?></code></td>
+                            <td><?= h($f['label']) ?></td>
+                            <td><?= h($f['type']) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <p class="muted">Brak tabeli pól formularza (<code><?= h(tbl('form_field')) ?></code>).</p>
             <?php endif; ?>
         </section>
 

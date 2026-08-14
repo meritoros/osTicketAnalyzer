@@ -100,6 +100,42 @@ try {
             json_response(['data' => report_closed_analytics($from, $to)]);
             break;
 
+        case 'departments':
+            json_response(['data' => schema_departments()]);
+            break;
+
+        case 'teams':
+            json_response(['data' => schema_teams()]);
+            break;
+
+        case 'breakdown':
+            $dimension = (string) $in('dimension', 'staff');
+            if (!in_array($dimension, ['staff', 'user', 'team', 'dept'], true)) {
+                $dimension = 'staff';
+            }
+            $metric = (string) $in('metric', 'avg_resolution');
+            if (!in_array($metric, ['avg_resolution', 'sum_resolution', 'avg_first_response', 'count'], true)) {
+                $metric = 'avg_resolution';
+            }
+            // dept_ids: tablica z body albo z GET (dept_ids[]=..)
+            $deptIds = [];
+            $rawDept = $body['dept_ids'] ?? ($_GET['dept_ids'] ?? []);
+            if (is_array($rawDept)) {
+                foreach ($rawDept as $d) {
+                    if (is_numeric($d)) { $deptIds[] = (int) $d; }
+                }
+            }
+            $activeOnly = (string) $in('active_only', '1') !== '0';
+            json_response([
+                'data' => report_breakdown($dimension, $metric, $from, $to, $deptIds, $activeOnly),
+                'meta' => ['dimension' => $dimension, 'metric' => $metric, 'is_time' => reports_metric_is_time($metric)],
+            ]);
+            break;
+
+        case 'ratings':
+            json_response(['data' => report_ratings($from, $to)]);
+            break;
+
         default:
             json_response(['error' => 'Nieznany raport.'], 404);
     }

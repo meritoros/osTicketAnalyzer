@@ -14,7 +14,13 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
 </head>
 <body>
 <header class="topbar">
-    <strong><?= $title ?></strong>
+    <div class="brand">
+        <?php $logo = (string) cfg('app.logo_url', ''); if ($logo !== ''): ?>
+            <img src="<?= htmlspecialchars($logo, ENT_QUOTES) ?>" alt="Logo" class="brand-logo"
+                 onerror="this.style.display='none'">
+        <?php endif; ?>
+        <strong><?= $title ?></strong>
+    </div>
     <nav>
         <a href="index.php" class="active">Dashboard</a>
         <a href="diagnostics.php">Diagnostyka</a>
@@ -105,6 +111,60 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
         </section>
     </div>
 
+    <!-- WYNIKI WG WYMIARU (pracownicy / użytkownicy / zespoły / oddziały) -->
+    <section class="card">
+        <h2>Wyniki wg wymiaru</h2>
+        <div class="dim-tabs" id="dim-tabs">
+            <button type="button" class="dim-tab active" data-dim="staff">Pracownicy</button>
+            <button type="button" class="dim-tab" data-dim="user">Użytkownicy</button>
+            <button type="button" class="dim-tab" data-dim="team">Zespoły</button>
+            <button type="button" class="dim-tab" data-dim="dept">Oddziały</button>
+        </div>
+        <div class="bd-controls">
+            <div class="field">
+                <label for="bd-metric">Metryka</label>
+                <select id="bd-metric">
+                    <option value="avg_resolution">Śr. czas rozwiązania</option>
+                    <option value="avg_first_response">Śr. czas 1. odpowiedzi</option>
+                    <option value="sum_resolution">Suma czasu rozwiązania</option>
+                    <option value="count">Liczba ticketów</option>
+                </select>
+            </div>
+            <div class="field bd-staff-only">
+                <label for="bd-dept">Działy (wielokrotny wybór)</label>
+                <select id="bd-dept" multiple size="4"></select>
+            </div>
+            <div class="field bd-staff-only">
+                <label>Konta</label>
+                <label class="switch">
+                    <input type="checkbox" id="bd-active" checked>
+                    <span class="slider"></span>
+                    <span class="switch-label" id="bd-active-label">tylko włączone</span>
+                </label>
+            </div>
+        </div>
+        <p class="muted" id="bd-note"></p>
+        <div class="table-scroll">
+            <table class="grid" id="bd-table">
+                <thead></thead>
+                <tbody><tr><td class="muted">Ładowanie…</td></tr></tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- OCENY TICKETÓW (gwiazdki 1–5) -->
+    <section class="card">
+        <h2>Oceny ticketów</h2>
+        <p class="muted" id="rating-note">Ładowanie…</p>
+        <div class="kpi-row" id="rating-kpis" hidden>
+            <div class="kpi accent"><div class="kpi-label">Średnia ocena</div><div class="kpi-value" id="kpi-rating-avg">—</div></div>
+            <div class="kpi"><div class="kpi-label">Ocenionych</div><div class="kpi-value" id="kpi-rating-count">—</div></div>
+            <div class="kpi"><div class="kpi-label">% ocenionych</div><div class="kpi-value" id="kpi-rating-pct">—</div></div>
+            <div class="kpi"><div class="kpi-label">Zamkniętych</div><div class="kpi-value" id="kpi-rating-total">—</div></div>
+        </div>
+        <canvas id="chart-rating" height="110"></canvas>
+    </section>
+
     <!-- AGENCI WG DZIAŁÓW (aktywni / nieaktywni) -->
     <section class="card">
         <h2>Agenci wg działów</h2>
@@ -171,7 +231,8 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
 <script>
     window.OSTA = {
         mode: <?= json_encode((string) cfg('db.mode', 'config')) ?>,
-        authEnabled: <?= auth_enabled() ? 'true' : 'false' ?>
+        authEnabled: <?= auth_enabled() ? 'true' : 'false' ?>,
+        defaultDept: <?= json_encode((string) cfg('app.default_department', '')) ?>
     };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>

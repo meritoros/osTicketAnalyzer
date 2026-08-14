@@ -350,3 +350,187 @@ function report_closed_analytics(?string $from, ?string $to): array
         'over_time'     => report_closed_over_time($from, $to),
     ];
 }
+
+// ---------------------------------------------------------------------------
+// Przekrój wg wymiaru (pracownicy / użytkownicy / zespoły / oddziały)
+// z kolumnami wg priorytetu. Dotyczy ticketów ZAMKNIĘTYCH w zakresie dat.
+// ---------------------------------------------------------------------------
+
+/** Wyrażenie SQL dla metryki (wartość w komórce). */
+function reports_metric_expr(string $metric): string
+{
+    switch ($metric) {
+        case 'sum_resolution':
+            return 'SUM(TIMESTAMPDIFF(SECOND, t.created, t.closed))';
+        case 'avg_first_response':
+            return 'AVG(CASE WHEN fr.first_response_at IS NOT NULL
+                            THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END)';
+        case 'count':
+            return 'COUNT(*)';
+        case 'avg_resolution':
+        default:
+            return 'AVG(TIMESTAMPDIFF(SECOND, t.created, t.closed))';
+    }
+}
+
+/** Czy metryka to liczba sekund (do formatowania jako czas), czy zwykła liczba. */
+function reports_metric_is_time(string $metric): bool
+{
+    return $metric !== 'count';
+}
+
+/**
+ * @param string     $dimension staff|user|team|dept
+ * @param string     $metric    avg_resolution|sum_resolution|avg_first_response|count
+ * @param int[]      $deptIds   filtr działów (tylko dla staff); pusty = wszystkie
+ * @param bool       $activeOnly tylko aktywne konta (tylko dla staff)
+ */
+function report_breakdown(string $dimension, string $metric, ?string $from, ?string $to,
+                          array $deptIds = [], bool $activeOnly = true): array
+{
+    $ps       = schema_priority_source();
+    $priCol   = reports_priority_expr($ps);
+    $hasCdata = $ps !== null && $ps['joinOnTicket'];
+
+    $T  = tbl('ticket');
+    $S  = tbl('ticket_status');
+    $PR = tbl('ticket_priority');
+    $CD = tbl('ticket__cdata');
+
+    // Definicja wymiaru: pola encji, złączenie, warunek "istnieje".
+    switch ($dimension) {
+        case 'user':
+            $entId = 'u.id'; $entName = 'u.name';
+            $join  = ' LEFT JOIN ' . tbl('user') . ' u ON u.id = t.user_id ';
+            $exists = ' AND t.user_id > 0 ';
+            break;
+        case 'team':
+            $entId = 'tm.team_id'; $entName = 'tm.name';
+            $join  = ' LEFT JOIN ' . tbl('team') . ' tm ON tm.team_id = t.team_id ';
+            $exists = ' AND t.team_id > 0 ';
+            break;
+        case 'dept':
+            $entId = 'd.id'; $entName = "COALESCE(d.name,'(bez działu)')";
+            $join  = ' LEFT JOIN ' . tbl('department') . ' d ON d.id = t.dept_id ';
+            $exists = ' AND t.dept_id > 0 ';
+            break;
+        case 'staff':
+        default:
+            $dimension = 'staff';
+            $entId = 'st.staff_id';
+            $entName = "TRIM(CONCAT(COALESCE(st.firstname,''),' ',COALESCE(st.lastname,'')))";
+            $join  = ' LEFT JOIN ' . tbl('staff') . ' st ON st.staff_id = t.staff_id ';
+            $exists = ' AND t.staff_id > 0 ';
+            break;
+    }
+
+    $valueExpr = reports_metric_expr($metric);
+    $needFr    = ($metric === 'avg_first_response');
+
+    $types = '';
+    $params = [];
+
+    $sql = "SELECT
+                $entId   AS entity_id,
+                $entName AS entity_name,
+                pr.priority_id,
+                pr.priority_desc AS priority_name,
+                pr.priority_color,
+                pr.priority_urgency,
+                $valueExpr AS value,
+                COUNT(*)   AS cnt
+            FROM $T t
+            JOIN $S s ON s.id = t.status_id AND s.state = 'closed' ";
+    if ($hasCdata) {
+        $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
+    }
+    $sql .= " LEFT JOIN $PR pr ON pr.priority_id = " . ($priCol ?? 'NULL') . " ";
+    $sql .= $join;
+    if ($needFr) {
+        $sql .= reports_first_response_join();
+    }
+    $sql .= " WHERE t.closed IS NOT NULL " . $exists;
+
+    // Filtr działów + aktywności — tylko dla pracowników.
+    if ($dimension === 'staff') {
+        if (!empty($deptIds)) {
+            $place = implode(',', array_fill(0, count($deptIds), '?'));
+            $sql .= " AND st.dept_id IN ($place) ";
+            foreach ($deptIds as $id) { $types .= 'i'; $params[] = (int) $id; }
+        }
+        if ($activeOnly) {
+            $sql .= ' AND st.isactive = 1 ';
+        }
+    }
+
+    $sql .= reports_range('t.closed', $from, $to, $types, $params);
+    $sql .= " GROUP BY entity_id, pr.priority_id
+              HAVING entity_id IS NOT NULL
+              ORDER BY entity_name ASC, pr.priority_urgency DESC";
+
+    return db_rows($sql, $types, $params);
+}
+
+// ---------------------------------------------------------------------------
+// Oceny ticketów (gwiazdki 1–5, liczone ze znaków w polu cdata)
+// ---------------------------------------------------------------------------
+
+/** Wyrażenie zwracające ocenę 1–5 (albo NULL) z kolumny cdata. */
+function reports_rating_expr(string $col): string
+{
+    // Liczba → bierzemy wprost; ciąg gwiazdek → liczymy znaki.
+    return "CASE
+                WHEN cd.`$col` IS NULL OR cd.`$col` = '' THEN NULL
+                WHEN cd.`$col` REGEXP '^[0-9]+$' THEN CAST(cd.`$col` AS UNSIGNED)
+                ELSE CHAR_LENGTH(TRIM(cd.`$col`))
+            END";
+}
+
+/** Analityka ocen: podsumowanie + rozkład 1–5. */
+function report_ratings(?string $from, ?string $to): array
+{
+    $field = schema_rating_field();
+    if ($field === null) {
+        return ['available' => false];
+    }
+
+    $T  = tbl('ticket');
+    $S  = tbl('ticket_status');
+    $CD = tbl('ticket__cdata');
+    $ratingExpr = reports_rating_expr($field);
+
+    // Podzapytanie z oceną na ticket.
+    $types = '';
+    $params = [];
+    $inner = "SELECT $ratingExpr AS r
+              FROM $T t
+              JOIN $S s ON s.id = t.status_id AND s.state = 'closed'
+              LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id
+              WHERE t.closed IS NOT NULL ";
+    $inner .= reports_range('t.closed', $from, $to, $types, $params);
+
+    $summary = db_row(
+        "SELECT COUNT(*) AS total_closed,
+                SUM(CASE WHEN r BETWEEN 1 AND 5 THEN 1 ELSE 0 END) AS rated,
+                AVG(CASE WHEN r BETWEEN 1 AND 5 THEN r END) AS avg_rating
+         FROM ($inner) x",
+        $types,
+        $params
+    );
+
+    $distribution = db_rows(
+        "SELECT r AS rating, COUNT(*) AS cnt
+         FROM ($inner) x
+         WHERE r BETWEEN 1 AND 5
+         GROUP BY r ORDER BY r ASC",
+        $types,
+        $params
+    );
+
+    return [
+        'available'    => true,
+        'field'        => $field,
+        'summary'      => $summary,
+        'distribution' => $distribution,
+    ];
+}

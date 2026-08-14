@@ -30,6 +30,10 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
 </head>
 <body class="login-page">
     <form class="login-card" method="post" autocomplete="off">
+        <?php $logo = (string) cfg('app.logo_url', ''); if ($logo !== ''): ?>
+            <img src="<?= htmlspecialchars($logo, ENT_QUOTES) ?>" alt="Logo" class="brand-logo"
+                 style="height:36px;margin:0 auto 4px" onerror="this.style.display='none'">
+        <?php endif; ?>
         <h1><?= $title ?></h1>
         <p class="muted">Podaj hasło dostępu do panelu.</p>
         <?php if ($error !== ''): ?>

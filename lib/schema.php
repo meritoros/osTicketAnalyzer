@@ -90,6 +90,96 @@ function schema_required_tables(): array
     return $out;
 }
 
+/** Lista działów: [['id'=>..,'name'=>..], ...]. */
+function schema_departments(): array
+{
+    if (!db_table_exists(tbl('department'))) {
+        return [];
+    }
+    return db_rows('SELECT id, name FROM ' . tbl('department') . ' ORDER BY name ASC');
+}
+
+/** Lista zespołów: [['team_id'=>..,'name'=>..], ...]. */
+function schema_teams(): array
+{
+    if (!db_table_exists(tbl('team'))) {
+        return [];
+    }
+    return db_rows('SELECT team_id, name FROM ' . tbl('team') . ' ORDER BY name ASC');
+}
+
+/**
+ * Wykrywa kolumnę w ost_ticket__cdata z oceną ticketu (gwiazdki).
+ * Kolejność: nadpisanie z configu → dopasowanie po nazwie/etykiecie pola formularza
+ * → skan kolumn cdata po nazwie. Zwraca bezpieczną nazwę kolumny albo null.
+ */
+function schema_rating_field(): ?string
+{
+    $cd = tbl('ticket__cdata');
+    if (!db_table_exists($cd)) {
+        return null;
+    }
+
+    $safe = function ($col) use ($cd): ?string {
+        $col = (string) $col;
+        if ($col !== '' && preg_match('/^[A-Za-z0-9_]+$/', $col) && db_column_exists($cd, $col)) {
+            return $col;
+        }
+        return null;
+    };
+
+    // 1) nadpisanie z configu
+    $cfg = (string) cfg('rating.field', '');
+    if ($cfg !== '') {
+        return $safe($cfg);
+    }
+
+    // 2) po polach formularza (label/name zawiera ocena/gwiazd/rating/star)
+    if (db_table_exists(tbl('form_field'))) {
+        try {
+            $rows = db_rows('SELECT name, label FROM ' . tbl('form_field'));
+            foreach ($rows as $r) {
+                $hay = mb_strtolower(((string) ($r['name'] ?? '')) . ' ' . ((string) ($r['label'] ?? '')));
+                if (preg_match('/ocen|gwiazd|rating|star/u', $hay)) {
+                    $found = $safe($r['name'] ?? '');
+                    if ($found !== null) {
+                        return $found;
+                    }
+                }
+            }
+        } catch (Throwable $e) { /* ignoruj */ }
+    }
+
+    // 3) skan kolumn cdata po nazwie
+    $cols = db_rows(
+        'SELECT column_name FROM information_schema.columns
+         WHERE table_schema = ? AND table_name = ?',
+        'ss',
+        [db_name(), $cd]
+    );
+    foreach ($cols as $c) {
+        $name = $c['column_name'] ?? ($c['COLUMN_NAME'] ?? '');
+        if ($name !== '' && preg_match('/ocen|gwiazd|rating|star/u', mb_strtolower($name))) {
+            $found = $safe($name);
+            if ($found !== null) {
+                return $found;
+            }
+        }
+    }
+    return null;
+}
+
+/** Lista pól formularzy (do diagnostyki wykrywania oceny). */
+function schema_form_fields(): array
+{
+    if (!db_table_exists(tbl('form_field'))) {
+        return [];
+    }
+    return db_rows(
+        'SELECT name, label, type FROM ' . tbl('form_field') . ' ORDER BY name ASC'
+    );
+}
+
 /** Zbiorcze podsumowanie schematu (dla API/diagnostyki). */
 function schema_summary(): array
 {
@@ -101,6 +191,7 @@ function schema_summary(): array
         'tables'          => $tables,
         'priorities'      => schema_priorities(),
         'statuses'        => schema_statuses(),
+        'rating_field'    => schema_rating_field(),
         'guessed_prefix'  => empty($tables[tbl('ticket')]) ? schema_guess_prefix() : null,
     ];
 }

@@ -37,6 +37,37 @@ code { background: rgba(148,163,184,.15); padding: 1px 5px; border-radius: 4px; 
 }
 .topbar nav a { margin-left: 16px; color: var(--muted); }
 .topbar nav a.active { color: var(--text); font-weight: 600; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-logo { height: 28px; width: auto; display: block; }
+
+/* Zakładki wymiaru */
+.dim-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.dim-tab {
+    background: var(--panel-2); color: var(--muted);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 14px; cursor: pointer; font-weight: 600; font-size: .9rem;
+}
+.dim-tab.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+
+.bd-controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; margin-bottom: 10px; }
+select[multiple] { min-width: 200px; }
+.pri-h { display: inline-flex; align-items: center; gap: 6px; }
+#bd-table td, #bd-table th { font-variant-numeric: tabular-nums; }
+
+/* Suwak (konta włączone / wszystkie) */
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; padding-bottom: 4px; }
+.switch input { display: none; }
+.switch .slider {
+    width: 40px; height: 22px; background: var(--border); border-radius: 999px;
+    position: relative; transition: .2s; flex: 0 0 auto;
+}
+.switch .slider::before {
+    content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; top: 3px; left: 3px; transition: .2s;
+}
+.switch input:checked + .slider { background: var(--accent); }
+.switch input:checked + .slider::before { transform: translateX(18px); }
+.switch .switch-label { font-size: .85rem; color: var(--muted); }
 
 .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
 

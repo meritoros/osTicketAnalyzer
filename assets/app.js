@@ -18,6 +18,9 @@ const BLUE  = '#3987e5';
 const INK_MUTED = '#94a3b8';
 const GRID = '#334155';
 
+let PRIORITIES = [];          // pełna lista priorytetów (kolumny w przekroju)
+let CURRENT_DIM = 'staff';    // aktywny wymiar w sekcji „Wyniki wg wymiaru"
+
 // Kolory wg wagi priorytetu (spójne, czytelne). Fallback, gdy brak koloru z osTicketa.
 function priorityColorByName(name) {
     const n = String(name || '').toLowerCase();
@@ -361,12 +364,158 @@ async function loadClosedAnalytics() {
         : '<tr><td colspan="3" class="muted">Brak danych.</td></tr>';
 }
 
+// --- Wyniki wg wymiaru (pivot) ---------------------------------------------
+
+// Kompaktowy czas do gęstej tabeli: „12,5 h" / „45 min" / „30 s".
+function fmtHours(seconds) {
+    if (seconds === null || seconds === undefined) return '—';
+    seconds = Number(seconds);
+    if (!isFinite(seconds) || seconds < 0) return '—';
+    if (seconds >= 3600) return (seconds / 3600).toLocaleString('pl-PL', { maximumFractionDigits: 1 }) + ' h';
+    if (seconds >= 60)   return Math.round(seconds / 60) + ' min';
+    return Math.round(seconds) + ' s';
+}
+
+async function loadDepartmentsFilter() {
+    const sel = $('#bd-dept');
+    if (!sel) return;
+    try {
+        const { data } = await api('departments');
+        const def = (window.OSTA && window.OSTA.defaultDept) || '';
+        sel.innerHTML = data.map((d) =>
+            `<option value="${esc(d.id)}"${d.name === def ? ' selected' : ''}>${esc(d.name)}</option>`
+        ).join('');
+    } catch (e) {
+        sel.innerHTML = '';
+        console.error('departments', e);
+    }
+}
+
+function selectedDeptIds() {
+    const sel = $('#bd-dept');
+    if (!sel) return [];
+    return Array.from(sel.selectedOptions).map((o) => o.value);
+}
+
+function buildBreakdownTable(rows, isTime) {
+    const cols = [...PRIORITIES].sort((a, b) => Number(b.priority_urgency) - Number(a.priority_urgency));
+    const thead = $('#bd-table thead');
+    const tbody = $('#bd-table tbody');
+
+    thead.innerHTML = '<tr><th>' + (CURRENT_DIM === 'staff' ? 'Pracownik'
+        : CURRENT_DIM === 'user' ? 'Użytkownik'
+        : CURRENT_DIM === 'team' ? 'Zespół' : 'Oddział') + '</th>'
+        + cols.map((p) => `<th><span class="pri-h"><i class="dot" style="background:${priorityColor(p)}"></i>${esc(p.priority_desc)}</span></th>`).join('')
+        + '<th>Ticketów</th></tr>';
+
+    if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="${cols.length + 2}" class="muted">Brak danych dla wybranych filtrów.</td></tr>`;
+        return;
+    }
+
+    const ents = {};
+    rows.forEach((r) => {
+        const id = r.entity_id;
+        if (!ents[id]) ents[id] = { name: r.entity_name || '(brak)', byPri: {}, total: 0 };
+        ents[id].byPri[r.priority_id] = r.value;
+        ents[id].total += Number(r.cnt || 0);
+    });
+
+    const fmtCell = (v) => {
+        if (v === null || v === undefined) return '<span class="muted">—</span>';
+        return isTime ? fmtHours(v) : Number(v).toLocaleString('pl-PL');
+    };
+
+    tbody.innerHTML = Object.values(ents)
+        .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+        .map((e) => `<tr>
+            <td>${esc(e.name)}</td>
+            ${cols.map((p) => `<td>${fmtCell(e.byPri[p.priority_id])}</td>`).join('')}
+            <td>${Number(e.total).toLocaleString('pl-PL')}</td>
+        </tr>`).join('');
+}
+
+async function loadBreakdown() {
+    const tbody = $('#bd-table tbody');
+    tbody.innerHTML = '<tr><td class="muted">Ładowanie…</td></tr>';
+
+    // pokaż/ukryj filtry działów+kont tylko dla pracowników
+    const staffOnly = CURRENT_DIM === 'staff';
+    document.querySelectorAll('.bd-staff-only').forEach((el) => { el.style.display = staffOnly ? '' : 'none'; });
+
+    const params = Object.assign({
+        dimension: CURRENT_DIM,
+        metric: $('#bd-metric').value,
+        active_only: $('#bd-active').checked ? '1' : '0',
+    }, currentFilters());
+    if (staffOnly) params.dept_ids = selectedDeptIds();
+
+    try {
+        const resp = await api('breakdown', params);
+        const isTime = resp.meta ? !!resp.meta.is_time : true;
+        buildBreakdownTable(resp.data || [], isTime);
+        $('#bd-note').textContent = 'Dane dla ticketów zamkniętych w wybranym zakresie dat'
+            + (staffOnly ? ' · przypisany agent.' : '.');
+    } catch (e) {
+        if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
+        tbody.innerHTML = `<tr><td class="error">Błąd: ${esc(e.message)}</td></tr>`;
+    }
+}
+
+// --- Oceny ticketów --------------------------------------------------------
+
+async function loadRatings() {
+    const note = $('#rating-note');
+    let res;
+    try {
+        res = (await api('ratings', currentFilters())).data;
+    } catch (e) {
+        if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
+        console.error('ratings', e);
+        return;
+    }
+    if (!res || res.available === false) {
+        $('#rating-kpis').hidden = true;
+        note.innerHTML = 'Nie wykryto pola z oceną (gwiazdkami). Ustaw <code>rating.field</code> w config.php '
+            + '— w diagnostyce zobaczysz listę pól formularza.';
+        if (charts['chart-rating']) { charts['chart-rating'].destroy(); delete charts['chart-rating']; }
+        return;
+    }
+
+    const s = res.summary || {};
+    const total = Number(s.total_closed || 0);
+    const rated = Number(s.rated || 0);
+    $('#kpi-rating-avg').textContent   = s.avg_rating != null ? Number(s.avg_rating).toLocaleString('pl-PL', { maximumFractionDigits: 2 }) + ' ★' : '—';
+    $('#kpi-rating-count').textContent = rated.toLocaleString('pl-PL');
+    $('#kpi-rating-pct').textContent   = total ? Math.round((rated / total) * 100) + '%' : '—';
+    $('#kpi-rating-total').textContent = total.toLocaleString('pl-PL');
+    $('#rating-kpis').hidden = false;
+    note.textContent = 'Ocena liczona z liczby gwiazdek (1–5). Nie wszystkie tickety są ocenione.';
+
+    const dist = res.distribution || [];
+    const byRating = {}; dist.forEach((d) => { byRating[Number(d.rating)] = Number(d.cnt); });
+    const labels = [1, 2, 3, 4, 5];
+    // od czerwieni (1) do zieleni (5)
+    const colors = ['#e34948', '#eda100', '#f0c000', '#7fbf5a', BRAND];
+
+    drawChart('chart-rating', {
+        type: 'bar',
+        data: {
+            labels: labels.map((n) => n + ' ★'),
+            datasets: [{ label: 'Liczba ocen', data: labels.map((n) => byRating[n] || 0),
+                backgroundColor: colors, borderRadius: 4 }],
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } },
+    });
+}
+
 // --- Priorytety ------------------------------------------------------------
 
 async function initPriorities() {
     const sel = $('#f-priority');
     try {
         const { data } = await api('priorities');
+        PRIORITIES = data || [];
         if (!data.length) { sel.innerHTML = '<option value="">(brak priorytetów)</option>'; return; }
         sel.innerHTML = data.map((p) =>
             `<option value="${esc(p.priority_id)}">${esc(p.priority_desc)} (${esc(p.priority)})</option>`
@@ -379,7 +528,16 @@ async function initPriorities() {
 }
 
 async function applyAll() {
-    await Promise.all([loadMain(), loadCharts(), loadClosedAnalytics(), loadDepartments()]);
+    await Promise.all([
+        loadMain(), loadCharts(), loadClosedAnalytics(),
+        loadDepartments(), loadBreakdown(), loadRatings(),
+    ]);
+}
+
+// Wczytuje dane słownikowe (priorytety, działy) i odświeża cały pulpit.
+async function boot() {
+    await Promise.all([initPriorities(), loadDepartmentsFilter()]);
+    await applyAll();
 }
 
 // --- Okienko z danymi do bazy (tryb prompt) --------------------------------
@@ -430,8 +588,7 @@ async function handleCredsSubmit(ev) {
             return;
         }
         closeCredsModal();
-        await initPriorities();
-        await applyAll();
+        await boot();
     } catch (e) {
         forgetCreds();
         status.textContent = '';
@@ -459,12 +616,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#f-apply').addEventListener('click', applyAll);
     $('#f-csv').addEventListener('click', exportCsv);
 
+    // Sekcja „Wyniki wg wymiaru"
+    $('#dim-tabs').addEventListener('click', (ev) => {
+        const btn = ev.target.closest('.dim-tab');
+        if (!btn) return;
+        document.querySelectorAll('.dim-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        CURRENT_DIM = btn.dataset.dim;
+        loadBreakdown();
+    });
+    $('#bd-metric').addEventListener('change', loadBreakdown);
+    $('#bd-dept').addEventListener('change', loadBreakdown);
+    $('#bd-active').addEventListener('change', () => {
+        $('#bd-active-label').textContent = $('#bd-active').checked ? 'tylko włączone' : 'wszystkie';
+        loadBreakdown();
+    });
+
     if (MODE === 'prompt') {
         $('#creds-form').addEventListener('submit', handleCredsSubmit);
         $('#creds-forget').addEventListener('click', () => { forgetCreds(); openCredsModal(); });
         if (!getCreds()) { openCredsModal(); return; } // czekaj na dane
     }
 
-    await initPriorities();
-    await applyAll();
+    await boot();
 });
