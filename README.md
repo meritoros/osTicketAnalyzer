@@ -94,6 +94,13 @@ samym serwerze** co osTicket — i tam też wgrywamy ten projekt.
   listę ticketów danego agenta z podświetleniem tego, który najbardziej zawyżył
   średnią — więc od razu widać, czy to systemowy problem, czy pojedynczy odstający
   ticket. Filtr priorytetów i działów przez rozwijane listy z checkboxami.
+- **Mapa cieplna czasów** (zakładka *Pracownicy*): tabela pracownik/użytkownik/
+  zespół/oddział × priorytet (Low/Medium/High/Emergency), z przełącznikiem
+  **Pierwsza odpowiedź / Otwarcie → Zamknięcie**. Kolor komórki pokazuje pozycję
+  danej wartości względem innych w tej samej kolumnie priorytetu (zielony =
+  szybciej, czerwony = wolniej) — dzięki porównaniu w obrębie kolumny, a nie
+  globalnie, priorytety o naturalnie różnej skali czasu (np. Low vs Emergency)
+  nie zniekształcają obrazu.
 
 Wszystko z filtrem zakresu dat. Kolory trzymają się jednego systemu wokół brandowej
 zieleni `#44BE78`; priorytety kolorowane wg wagi (niski→zielony … krytyczny→czerwony).

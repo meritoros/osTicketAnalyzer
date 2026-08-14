@@ -235,7 +235,14 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
             <!-- ============ ZAKŁADKA: PRACOWNICY ============ -->
             <div class="tab-panel" data-tab="people" hidden>
                 <section class="card">
-                    <h2>Wyniki wg wymiaru</h2>
+                    <h2>🌡️ Mapa cieplna czasów — wg wymiaru i priorytetu</h2>
+                    <p class="section-hint">
+                        Kolor komórki pokazuje pozycję względem innych w tej samej kolumnie priorytetu —
+                        <span class="heat-legend-inline"><i class="heat-chip" style="background:#c9ecd7"></i>szybciej</span>
+                        <span class="heat-legend-inline"><i class="heat-chip" style="background:#ffe9b3"></i>przeciętnie</span>
+                        <span class="heat-legend-inline"><i class="heat-chip" style="background:#fbd2d2"></i>wolniej</span>
+                        — więc od razu widać, kto najbardziej odstaje przy danym priorytecie.
+                    </p>
                     <div class="dim-tabs" id="dim-tabs">
                         <button type="button" class="dim-tab active" data-dim="staff">Pracownicy</button>
                         <button type="button" class="dim-tab" data-dim="user">Użytkownicy</button>
@@ -244,13 +251,13 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                     </div>
                     <div class="bd-controls">
                         <div class="field">
-                            <label for="bd-metric">Metryka</label>
-                            <select id="bd-metric">
-                                <option value="avg_resolution">Śr. czas rozwiązania</option>
-                                <option value="avg_first_response">Śr. czas 1. odpowiedzi</option>
-                                <option value="sum_resolution">Suma czasu rozwiązania</option>
-                                <option value="count">Liczba ticketów</option>
-                            </select>
+                            <label>Miara czasu</label>
+                            <div class="metric-tabs" id="bd-metric-tabs">
+                                <button type="button" class="metric-tab active" data-metric="avg_first_response">⏱ Pierwsza odpowiedź</button>
+                                <button type="button" class="metric-tab" data-metric="avg_resolution">🏁 Otwarcie → Zamknięcie</button>
+                                <button type="button" class="metric-tab compact" data-metric="sum_resolution">Suma czasu</button>
+                                <button type="button" class="metric-tab compact" data-metric="count">Liczba ticketów</button>
+                            </div>
                         </div>
                         <div class="field bd-staff-only">
                             <label>Działy</label>

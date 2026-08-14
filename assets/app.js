@@ -35,7 +35,8 @@ function greenGradient(horizontal) {
 }
 
 let PRIORITIES = [];          // pełna lista priorytetów (kolumny w przekroju)
-let CURRENT_DIM = 'staff';    // aktywny wymiar w sekcji „Wyniki wg wymiaru"
+let CURRENT_DIM = 'staff';    // aktywny wymiar w sekcji „Mapa cieplna"
+let CURRENT_METRIC = 'avg_first_response'; // aktywna miara czasu w tej samej sekcji
 
 // --- Zakładki --------------------------------------------------------------
 const TAB_TITLES = { overview: 'Przegląd', priorities: 'Priorytety', people: 'Pracownicy', ratings: 'Oceny' };
@@ -577,6 +578,35 @@ function selectedDeptIds() {
     return DEPT_MSEL ? DEPT_MSEL.getSelected() : [];
 }
 
+// Kolor mapy cieplnej: 0 = najszybciej w kolumnie (zielony) … 1 = najwolniej (czerwony).
+function heatColor(pct) {
+    pct = Math.max(0, Math.min(1, isFinite(pct) ? pct : 0.5));
+    const stops = [
+        { p: 0,   c: [201, 236, 215] }, // zielony — szybciej
+        { p: 0.5, c: [255, 233, 179] }, // bursztynowy — przeciętnie
+        { p: 1,   c: [251, 210, 210] }, // czerwony — wolniej
+    ];
+    let lo = stops[0], hi = stops[1];
+    for (let i = 0; i < stops.length - 1; i++) {
+        if (pct >= stops[i].p && pct <= stops[i + 1].p) { lo = stops[i]; hi = stops[i + 1]; break; }
+    }
+    const t = (pct - lo.p) / ((hi.p - lo.p) || 1);
+    const c = [0, 1, 2].map((i) => Math.round(lo.c[i] + (hi.c[i] - lo.c[i]) * t));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+// Pozycja wartości względem posortowanej kolumny (0..1), z uśrednieniem remisów.
+function percentileForValue(v, sortedVals) {
+    if (v === null || v === undefined || !sortedVals.length) return null;
+    if (sortedVals.length === 1) return 0.5;
+    let lo = 0;
+    while (lo < sortedVals.length && sortedVals[lo] < v) lo++;
+    let hi = lo;
+    while (hi < sortedVals.length && sortedVals[hi] === v) hi++;
+    const rank = (lo + hi - 1) / 2;
+    return rank / (sortedVals.length - 1);
+}
+
 function buildBreakdownTable(rows, isTime) {
     const cols = [...PRIORITIES].sort((a, b) => Number(b.priority_urgency) - Number(a.priority_urgency));
     const thead = $('#bd-table thead');
@@ -600,17 +630,38 @@ function buildBreakdownTable(rows, isTime) {
         ents[id].byPri[r.priority_id] = r.value;
         ents[id].total += Number(r.cnt || 0);
     });
+    const entList = Object.values(ents).sort((a, b) => a.name.localeCompare(b.name, 'pl'));
 
     const fmtCell = (v) => {
         if (v === null || v === undefined) return '<span class="muted">—</span>';
         return isTime ? fmtHours(v) : Number(v).toLocaleString('pl-PL');
     };
 
-    tbody.innerHTML = Object.values(ents)
-        .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
-        .map((e) => `<tr>
+    // Mapa cieplna tylko dla średnich czasowych — suma/liczba nie są uczciwym
+    // porównaniem „kto najgorszy" (więcej ticketów = większa suma, to nie wina agenta).
+    const heatOn = isTime && (CURRENT_METRIC === 'avg_first_response' || CURRENT_METRIC === 'avg_resolution');
+    const colStats = {};
+    if (heatOn) {
+        cols.forEach((p) => {
+            colStats[p.priority_id] = entList
+                .map((e) => e.byPri[p.priority_id])
+                .filter((v) => v !== null && v !== undefined)
+                .map(Number)
+                .sort((a, b) => a - b);
+        });
+    }
+
+    tbody.innerHTML = entList.map((e) => `<tr>
             <td>${esc(e.name)}</td>
-            ${cols.map((p) => `<td>${fmtCell(e.byPri[p.priority_id])}</td>`).join('')}
+            ${cols.map((p) => {
+                const v = e.byPri[p.priority_id];
+                let style = '';
+                if (heatOn && v !== null && v !== undefined) {
+                    const pct = percentileForValue(Number(v), colStats[p.priority_id]);
+                    if (pct !== null) style = ` style="background:${heatColor(pct)}"`;
+                }
+                return `<td${style}>${fmtCell(v)}</td>`;
+            }).join('')}
             <td>${Number(e.total).toLocaleString('pl-PL')}</td>
         </tr>`).join('');
 }
@@ -625,7 +676,7 @@ async function loadBreakdown() {
 
     const params = Object.assign({
         dimension: CURRENT_DIM,
-        metric: $('#bd-metric').value,
+        metric: CURRENT_METRIC,
         active_only: $('#bd-active').checked ? '1' : '0',
     }, currentFilters());
     if (staffOnly) params.dept_ids = selectedDeptIds();
@@ -1005,7 +1056,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         CURRENT_DIM = btn.dataset.dim;
         loadBreakdown();
     });
-    $('#bd-metric').addEventListener('change', loadBreakdown);
+    $('#bd-metric-tabs').addEventListener('click', (ev) => {
+        const btn = ev.target.closest('.metric-tab');
+        if (!btn) return;
+        document.querySelectorAll('#bd-metric-tabs .metric-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        CURRENT_METRIC = btn.dataset.metric;
+        loadBreakdown();
+    });
     $('#bd-active').addEventListener('change', () => {
         $('#bd-active-label').textContent = $('#bd-active').checked ? 'tylko włączone' : 'wszystkie';
         loadBreakdown();
