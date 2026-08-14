@@ -13,10 +13,26 @@ const charts = {}; // uchwyty Chart.js
 
 // Paleta kategorialna (zwalidowana na ciemnym tle: zieleń→pomarańcz→niebieski→magenta→fiolet→czerwień)
 const PALETTE = ['#33A667', '#d95926', '#3987e5', '#d55181', '#9085e9', '#e66767'];
-const BRAND = '#33A667';       // seria „zieleń" na wykresach (ciemny krok brandu)
-const BLUE  = '#3987e5';
-const INK_MUTED = '#94a3b8';
-const GRID = '#334155';
+const BRAND = '#2f9c63';       // seria „zieleń" na wykresach
+const BLUE  = '#3b82f6';
+const INK_MUTED = '#6b7280';   // tekst osi/legend (jasny motyw)
+const GRID = '#e6e9f0';        // siatka (jasny motyw)
+const PANEL = '#ffffff';
+
+// Gradient słupka (poziomy/pionowy) w barwie brandu — jak we wzorcu.
+function greenGradient(horizontal) {
+    return (context) => {
+        const { chart } = context;
+        const { ctx, chartArea } = chart;
+        if (!chartArea) return BRAND;
+        const g = horizontal
+            ? ctx.createLinearGradient(chartArea.left, 0, chartArea.right, 0)
+            : ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+        g.addColorStop(0, '#2b8f5a');
+        g.addColorStop(1, '#6fd39b');
+        return g;
+    };
+}
 
 let PRIORITIES = [];          // pełna lista priorytetów (kolumny w przekroju)
 let CURRENT_DIM = 'staff';    // aktywny wymiar w sekcji „Wyniki wg wymiaru"
@@ -31,11 +47,14 @@ function priorityColorByName(name) {
     return INK_MUTED;
 }
 
-// Użyj koloru z osTicketa (priority_color), a jak brak — mapowania po nazwie.
+// Kolor priorytetu wg wagi (czytelny). Kolory z osTicketa są zbyt pastelowe,
+// więc używamy własnej skali; kolor z bazy tylko gdy nazwa nierozpoznana.
 function priorityColor(row) {
+    const byName = priorityColorByName(row.priority_name);
+    if (byName !== INK_MUTED) return byName;
     const c = String(row.priority_color || '').trim();
     if (/^#?[0-9a-fA-F]{6}$/.test(c)) return c.startsWith('#') ? c : '#' + c;
-    return priorityColorByName(row.priority_name);
+    return byName;
 }
 
 // --- Dane do bazy (tryb prompt) --------------------------------------------
@@ -201,7 +220,7 @@ async function loadCharts() {
                 datasets: [{
                     data: data.map((r) => Number(r.total)),
                     backgroundColor: data.map(priorityColor),
-                    borderColor: '#1e293b', borderWidth: 2,
+                    borderColor: PANEL, borderWidth: 2,
                 }],
             },
             options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
@@ -215,7 +234,7 @@ async function loadCharts() {
             data: {
                 labels: data.map((r) => r.agent || '(nieprzypisany)'),
                 datasets: [{ label: 'Tickety', data: data.map((r) => Number(r.total)),
-                    backgroundColor: BRAND, borderRadius: 4 }],
+                    backgroundColor: greenGradient(true), borderRadius: 5, maxBarThickness: 22 }],
             },
             options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } },
         });
@@ -228,7 +247,7 @@ async function loadCharts() {
             data: {
                 labels: data.map((r) => r.submitter || '(nieznany)'),
                 datasets: [{ label: 'Zgłoszenia', data: data.map((r) => Number(r.total)),
-                    backgroundColor: BLUE, borderRadius: 4 }],
+                    backgroundColor: BLUE, borderRadius: 5, maxBarThickness: 22 }],
             },
             options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } },
         });
@@ -283,6 +302,22 @@ async function loadDepartments() {
     } catch (e) {
         if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
         container.innerHTML = `<p class="error">Błąd: ${esc(e.message)}</p>`;
+    }
+}
+
+// --- Przegląd (górne KPI) --------------------------------------------------
+
+async function loadOverview() {
+    try {
+        const { data } = await api('overview', currentFilters());
+        const num = (v) => (v != null ? Number(v).toLocaleString('pl-PL') : '0');
+        $('#ov-open').textContent   = num(data.open_now);
+        $('#ov-closed').textContent = num(data.closed_in_range);
+        $('#ov-fr').textContent  = fmtDuration(data.avg_first_response_seconds != null ? Math.round(data.avg_first_response_seconds) : null);
+        $('#ov-res').textContent = fmtDuration(data.avg_resolution_seconds != null ? Math.round(data.avg_resolution_seconds) : null);
+    } catch (e) {
+        if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
+        console.error('overview', e);
     }
 }
 
@@ -529,7 +564,7 @@ async function initPriorities() {
 
 async function applyAll() {
     await Promise.all([
-        loadMain(), loadCharts(), loadClosedAnalytics(),
+        loadOverview(), loadMain(), loadCharts(), loadClosedAnalytics(),
         loadDepartments(), loadBreakdown(), loadRatings(),
     ]);
 }

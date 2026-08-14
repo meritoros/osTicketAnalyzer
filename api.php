@@ -96,6 +96,10 @@ try {
             json_response(['data' => report_staff_by_department()]);
             break;
 
+        case 'overview':
+            json_response(['data' => report_overview($from, $to)]);
+            break;
+
         case 'closed_analytics':
             json_response(['data' => report_closed_analytics($from, $to)]);
             break;

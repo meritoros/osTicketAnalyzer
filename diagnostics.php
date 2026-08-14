@@ -26,7 +26,7 @@ if ($mode === 'prompt') {
     <title>Diagnostyka — <?= $title ?></title>
     <link rel="stylesheet" href="assets/styles.css"></head>
     <body>
-    <header class="topbar"><strong><?= $title ?></strong>
+    <header class="simple-top"><strong><?= $title ?></strong>
         <nav><a href="index.php">Dashboard</a><a href="diagnostics.php" class="active">Diagnostyka</a>
         <?php if (auth_enabled()): ?><a href="logout.php">Wyloguj</a><?php endif; ?></nav>
     </header>
@@ -84,7 +84,7 @@ if ($fatal === null) {
     <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
-<header class="topbar">
+<header class="simple-top">
     <strong><?= $title ?></strong>
     <nav>
         <a href="index.php">Dashboard</a>

@@ -340,6 +340,26 @@ function report_closed_over_time(?string $from, ?string $to): array
     return db_rows($sql, $types, $params);
 }
 
+/** Przegląd do górnych KPI: otwarte teraz + skrót zamkniętych w okresie. */
+function report_overview(?string $from, ?string $to): array
+{
+    $T = tbl('ticket');
+    $S = tbl('ticket_status');
+
+    $openRow = db_row(
+        "SELECT COUNT(*) AS c FROM $T t
+         JOIN $S s ON s.id = t.status_id AND s.state = 'open'"
+    );
+    $closed = report_closed_summary($from, $to);
+
+    return [
+        'open_now'                   => $openRow ? (int) $openRow['c'] : 0,
+        'closed_in_range'            => $closed['total_closed'] ?? 0,
+        'avg_first_response_seconds' => $closed['avg_first_response_seconds'] ?? null,
+        'avg_resolution_seconds'     => $closed['avg_resolution_seconds'] ?? null,
+    ];
+}
+
 /** Zbiorcza analityka zamkniętych ticketów (jeden endpoint dla frontu). */
 function report_closed_analytics(?string $from, ?string $to): array
 {
