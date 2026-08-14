@@ -70,6 +70,94 @@ function priorityColor(row) {
     return byName;
 }
 
+// --- Komponent: rozwijana lista z checkboxami (zamiast <select multiple>) --
+
+function createMultiSelect(container, items, opts) {
+    opts = opts || {};
+    const getId    = opts.getId    || ((x) => x.id);
+    const getLabel = opts.getLabel || ((x) => x.name);
+    let selected = new Set((opts.selected || items.map(getId)).map(String));
+
+    container.classList.add('msel');
+    container.innerHTML = `
+        <button type="button" class="msel-toggle">
+            <span class="msel-label"></span>
+            <svg class="msel-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="msel-panel" hidden>
+            <div class="msel-actions">
+                <button type="button" data-act="all">Zaznacz wszystkie</button>
+                <button type="button" data-act="none">Wyczyść</button>
+            </div>
+            <div class="msel-options"></div>
+        </div>`;
+
+    const toggle = container.querySelector('.msel-toggle');
+    const label  = container.querySelector('.msel-label');
+    const panel  = container.querySelector('.msel-panel');
+    const box    = container.querySelector('.msel-options');
+
+    box.innerHTML = items.map((it) => {
+        const id = esc(String(getId(it)));
+        const checked = selected.has(String(getId(it))) ? 'checked' : '';
+        return `<label class="msel-option"><input type="checkbox" value="${id}" ${checked}><span>${esc(getLabel(it))}</span></label>`;
+    }).join('');
+
+    function updateLabel() {
+        if (!items.length) label.textContent = 'Brak pozycji';
+        else if (selected.size === 0) label.textContent = 'Brak wybranych';
+        else if (selected.size === items.length) label.textContent = 'Wszystkie';
+        else if (selected.size === 1) {
+            const only = Array.from(selected)[0];
+            const it = items.find((x) => String(getId(x)) === only);
+            label.textContent = it ? getLabel(it) : '1 wybrany';
+        } else label.textContent = `Wybrano ${selected.size} z ${items.length}`;
+    }
+    updateLabel();
+
+    function closePanel() { panel.hidden = true; container.classList.remove('open'); }
+
+    toggle.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const willOpen = panel.hidden;
+        document.querySelectorAll('.msel-panel').forEach((p) => { p.hidden = true; });
+        document.querySelectorAll('.msel.open').forEach((m) => m.classList.remove('open'));
+        panel.hidden = !willOpen;
+        container.classList.toggle('open', willOpen);
+    });
+    document.addEventListener('click', (ev) => { if (!container.contains(ev.target)) closePanel(); });
+
+    box.addEventListener('change', (ev) => {
+        const cb = ev.target.closest('input[type=checkbox]');
+        if (!cb) return;
+        if (cb.checked) selected.add(cb.value); else selected.delete(cb.value);
+        updateLabel();
+        if (opts.onChange) opts.onChange(Array.from(selected));
+    });
+
+    panel.querySelector('[data-act="all"]').addEventListener('click', () => {
+        selected = new Set(items.map((it) => String(getId(it))));
+        box.querySelectorAll('input[type=checkbox]').forEach((cb) => { cb.checked = true; });
+        updateLabel();
+        if (opts.onChange) opts.onChange(Array.from(selected));
+    });
+    panel.querySelector('[data-act="none"]').addEventListener('click', () => {
+        selected = new Set();
+        box.querySelectorAll('input[type=checkbox]').forEach((cb) => { cb.checked = false; });
+        updateLabel();
+        if (opts.onChange) opts.onChange(Array.from(selected));
+    });
+
+    return {
+        getSelected: () => Array.from(selected),
+        setSelected: (ids) => {
+            selected = new Set(ids.map(String));
+            box.querySelectorAll('input[type=checkbox]').forEach((cb) => { cb.checked = selected.has(cb.value); });
+            updateLabel();
+        },
+    };
+}
+
 // --- Dane do bazy (tryb prompt) --------------------------------------------
 
 function getCreds() {
@@ -452,25 +540,41 @@ function fmtHours(seconds) {
     return Math.round(seconds) + ' s';
 }
 
+let DEPARTMENTS = [];
+let DEPT_MSEL = null;      // wybór działów w „Wyniki wg wymiaru"
+let PR_DEPT_MSEL = null;   // wybór działów w „Ranking priorytetowy"
+
 async function loadDepartmentsFilter() {
-    const sel = $('#bd-dept');
-    if (!sel) return;
+    const bdEl = $('#bd-dept-msel');
+    const prEl = $('#pr-dept-msel');
     try {
         const { data } = await api('departments');
+        DEPARTMENTS = data || [];
         const def = (window.OSTA && window.OSTA.defaultDept) || '';
-        sel.innerHTML = data.map((d) =>
-            `<option value="${esc(d.id)}"${d.name === def ? ' selected' : ''}>${esc(d.name)}</option>`
-        ).join('');
+        const preferred = DEPARTMENTS.filter((d) => d.name === def).map((d) => String(d.id));
+        const bdDefault = preferred.length ? preferred : DEPARTMENTS.map((d) => String(d.id));
+
+        if (bdEl) {
+            DEPT_MSEL = createMultiSelect(bdEl, DEPARTMENTS, {
+                getId: (d) => d.id, getLabel: (d) => d.name,
+                selected: bdDefault,
+                onChange: () => loadBreakdown(),
+            });
+        }
+        if (prEl) {
+            PR_DEPT_MSEL = createMultiSelect(prEl, DEPARTMENTS, {
+                getId: (d) => d.id, getLabel: (d) => d.name,
+                selected: DEPARTMENTS.map((d) => String(d.id)), // ranking: domyślnie wszystkie działy
+                onChange: () => loadPriorityRanking(),
+            });
+        }
     } catch (e) {
-        sel.innerHTML = '';
         console.error('departments', e);
     }
 }
 
 function selectedDeptIds() {
-    const sel = $('#bd-dept');
-    if (!sel) return [];
-    return Array.from(sel.selectedOptions).map((o) => o.value);
+    return DEPT_MSEL ? DEPT_MSEL.getSelected() : [];
 }
 
 function buildBreakdownTable(rows, isTime) {
@@ -535,6 +639,152 @@ async function loadBreakdown() {
     } catch (e) {
         if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
         tbody.innerHTML = `<tr><td class="error">Błąd: ${esc(e.message)}</td></tr>`;
+    }
+}
+
+// --- Ranking priorytetowy: kto ma najgorsze czasy --------------------------
+// Liczy się średni czas do 1. odpowiedzi ORAZ do zamknięcia, plus wskazanie
+// KONKRETNEGO ticketa, który najbardziej zawyżył średnią danego agenta —
+// żeby dało się od razu odróżnić pojedynczy odstający przypadek od problemu
+// systemowego.
+
+let PR_PRIORITY_MSEL = null;
+let PR_TICKETS = [];
+
+function buildPriorityMultiSelect() {
+    const el = $('#pr-priority-msel');
+    if (!el || !PRIORITIES.length) return;
+
+    const highRegex = /wysok|high|krytycz|pilne|emergency|urgent/i;
+    let defaultIds = PRIORITIES
+        .filter((p) => highRegex.test(p.priority_desc || '') || highRegex.test(p.priority || ''))
+        .map((p) => String(p.priority_id));
+    if (!defaultIds.length) {
+        // fallback: górna połowa wg wagi (urgency), gdy nazwy nie dają się rozpoznać
+        const sorted = [...PRIORITIES].sort((a, b) => Number(b.priority_urgency) - Number(a.priority_urgency));
+        defaultIds = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 2))).map((p) => String(p.priority_id));
+    }
+
+    PR_PRIORITY_MSEL = createMultiSelect(el, PRIORITIES, {
+        getId: (p) => p.priority_id, getLabel: (p) => p.priority_desc,
+        selected: defaultIds,
+        onChange: () => loadPriorityRanking(),
+    });
+}
+
+async function loadPriorityRanking() {
+    const tbody = $('#pr-ranking-table tbody');
+    if (!tbody) return;
+    $('#pr-detail').hidden = true;
+
+    const priorityIds = PR_PRIORITY_MSEL ? PR_PRIORITY_MSEL.getSelected() : [];
+    if (!priorityIds.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="muted">Wybierz co najmniej jeden priorytet.</td></tr>';
+        $('#pr-note').textContent = '';
+        return;
+    }
+
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">Ładowanie…</td></tr>';
+    const params = Object.assign({
+        priority_ids: priorityIds,
+        dept_ids: PR_DEPT_MSEL ? PR_DEPT_MSEL.getSelected() : [],
+        active_only: $('#pr-active').checked ? '1' : '0',
+    }, currentFilters());
+
+    try {
+        const { data } = await api('priority_ranking', params);
+        PR_TICKETS = data.tickets || [];
+        const summary = data.summary || [];
+
+        if (!summary.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="muted">Brak zamkniętych ticketów dla wybranych filtrów.</td></tr>';
+            $('#pr-note').textContent = '';
+            return;
+        }
+
+        const totalTickets = summary.reduce((a, s) => a + Number(s.count || 0), 0);
+        $('#pr-note').textContent = `${summary.length} pracowników · ${totalTickets} priorytetowych ticketów w wybranym zakresie.`;
+
+        // Próg ostrzegawczy: wyraźnie powyżej mediany śr. czasu rozwiązania.
+        const resValues = summary.map((s) => s.avg_resolution_seconds).filter((v) => v != null).sort((a, b) => a - b);
+        const median = resValues.length ? resValues[Math.floor(resValues.length / 2)] : 0;
+
+        tbody.innerHTML = summary.map((s, idx) => {
+            const worst = idx === 0 && s.avg_resolution_seconds != null;
+            const warn  = !worst && median > 0 && s.avg_resolution_seconds != null && s.avg_resolution_seconds > median * 1.3;
+            const rowClass = worst ? 'row-worst' : (warn ? 'row-warn' : '');
+            const fr = s.max_first_response_ticket;
+            const rs = s.max_resolution_ticket;
+            return `<tr class="${rowClass}" data-staff="${esc(s.staff_id)}" data-name="${esc(s.agent)}">
+                <td>
+                    ${worst ? '<span class="badge-worst" title="Najdłuższy średni czas rozwiązania">🔻 najgorszy</span> ' : ''}
+                    <strong>${esc(s.agent)}</strong>
+                    ${!Number(s.isactive) ? '<span class="badge off" style="margin-left:6px">nieaktywny</span>' : ''}
+                </td>
+                <td>${Number(s.count).toLocaleString('pl-PL')}</td>
+                <td>${durBadge(s.avg_first_response_seconds, 'fr')}</td>
+                <td>${fr ? `<button type="button" class="linklike-cell" data-jump="${esc(fr.number)}">#${esc(fr.number)} · ${esc(fmtDuration(fr.seconds))}</button>` : '<span class="muted">—</span>'}</td>
+                <td>${durBadge(s.avg_resolution_seconds, 'res')}</td>
+                <td>${rs ? `<button type="button" class="linklike-cell" data-jump="${esc(rs.number)}">#${esc(rs.number)} · ${esc(fmtDuration(rs.seconds))}</button>` : '<span class="muted">—</span>'}</td>
+            </tr>`;
+        }).join('');
+
+        tbody.querySelectorAll('tr[data-staff]').forEach((tr) => {
+            tr.addEventListener('click', (ev) => {
+                if (ev.target.closest('.linklike-cell')) return; // ma własną obsługę niżej
+                openAgentDrilldown(tr.dataset.staff, tr.dataset.name);
+            });
+        });
+        tbody.querySelectorAll('.linklike-cell').forEach((btn) => {
+            btn.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                const tr = ev.target.closest('tr');
+                openAgentDrilldown(tr.dataset.staff, tr.dataset.name, btn.dataset.jump);
+            });
+        });
+    } catch (e) {
+        if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
+        tbody.innerHTML = `<tr><td colspan="6" class="error">Błąd: ${esc(e.message)}</td></tr>`;
+    }
+}
+
+// Rozwija pełną listę priorytetowych ticketów danego agenta (do „poczytania"),
+// posortowaną od najdłuższego czasu rozwiązania — z podświetleniem tego,
+// który najbardziej zawyżył średnią.
+function openAgentDrilldown(staffId, agentName, jumpToNumber) {
+    const box = $('#pr-detail');
+    const tbody = $('#pr-detail-table tbody');
+    $('#pr-detail-title').textContent = `Tickety pracownika: ${agentName}`;
+
+    const rows = PR_TICKETS
+        .filter((t) => String(t.staff_id) === String(staffId))
+        .slice()
+        .sort((a, b) => (Number(b.resolution_seconds) || 0) - (Number(a.resolution_seconds) || 0));
+
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="muted">Brak ticketów.</td></tr>';
+    } else {
+        const worstRes = rows[0] ? Number(rows[0].resolution_seconds) : null;
+        tbody.innerHTML = rows.map((r) => {
+            const isWorst = worstRes != null && Number(r.resolution_seconds) === worstRes;
+            return `<tr class="${isWorst ? 'row-worst' : ''}" id="pr-ticket-${esc(r.number)}">
+                <td>${esc(r.number)}</td>
+                <td>${esc(r.subject || '')}</td>
+                <td>${esc(r.submitter || '')}</td>
+                <td>${esc(r.priority_name || '')}</td>
+                <td>${esc(fmtDateTime(r.opened_at))}</td>
+                <td>${durBadge(r.first_response_seconds, 'fr')}</td>
+                <td>${esc(fmtDateTime(r.closed_at))}</td>
+                <td>${durBadge(r.resolution_seconds, 'res')}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    box.hidden = false;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (jumpToNumber) {
+        const el = document.getElementById('pr-ticket-' + jumpToNumber);
+        if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250);
     }
 }
 
@@ -646,13 +896,15 @@ async function initPriorities() {
 async function applyAll() {
     await Promise.all([
         loadOverview(), loadMain(), loadCharts(), loadClosedAnalytics(),
-        loadDepartments(), loadBreakdown(), loadRatings(),
+        loadDepartments(), loadBreakdown(), loadRatings(), loadPriorityRanking(),
     ]);
 }
 
 // Wczytuje dane słownikowe (priorytety, działy) i odświeża cały pulpit.
 async function boot() {
-    await Promise.all([initPriorities(), loadDepartmentsFilter()]);
+    await initPriorities();
+    await loadDepartmentsFilter();
+    buildPriorityMultiSelect();
     await applyAll();
 }
 
@@ -754,10 +1006,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadBreakdown();
     });
     $('#bd-metric').addEventListener('change', loadBreakdown);
-    $('#bd-dept').addEventListener('change', loadBreakdown);
     $('#bd-active').addEventListener('change', () => {
         $('#bd-active-label').textContent = $('#bd-active').checked ? 'tylko włączone' : 'wszystkie';
         loadBreakdown();
+    });
+
+    // Ranking priorytetowy (zakładka Priorytety)
+    $('#pr-active').addEventListener('change', () => {
+        $('#pr-active-label').textContent = $('#pr-active').checked ? 'tylko włączone' : 'wszystkie';
+        loadPriorityRanking();
+    });
+    $('#pr-detail-close').addEventListener('click', () => { $('#pr-detail').hidden = true; });
+    $('#jump-to-rollout').addEventListener('click', () => {
+        $('#f-from').value = '2026-04-29';
+        applyAll();
     });
 
     if (MODE === 'prompt') {

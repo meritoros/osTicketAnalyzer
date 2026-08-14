@@ -119,8 +119,67 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
             <!-- ============ ZAKŁADKA: PRIORYTETY ============ -->
             <div class="tab-panel" data-tab="priorities" hidden>
                 <div class="banner info">
-                    ℹ️ Priorytety wdrożono w osTicket <strong>1.05.2026</strong> — zgłoszenia sprzed tej daty mają domyślny priorytet („Normal"), więc podziały priorytetowe są miarodajne dopiero od maja 2026.
+                    ℹ️ Priorytety wdrożono firmowo w <strong>kwietniu 2026</strong> (wdrożenie ukończone 29.04.2026) —
+                    jeden dział miał je już od grudnia 2025, więc dane sprzed kwietnia mogą mieć domyślny priorytet
+                    w zależności od działu.
+                    <button type="button" class="linklike" id="jump-to-rollout">Ustaw zakres „od wdrożenia" (29.04.2026)</button>
                 </div>
+
+                <!-- RANKING: kto ma najgorsze czasy na priorytetowych zgłoszeniach -->
+                <section class="card highlight-card">
+                    <h2>🏆 Ranking pracowników — priorytetowe zgłoszenia</h2>
+                    <p class="section-hint">
+                        Liczy się <strong>obie</strong> miary: czas do pierwszej odpowiedzi ORAZ czas do faktycznego
+                        zamknięcia ticketa — żeby nie dało się „odpisać i zniknąć". Kliknij wiersz agenta, aby zobaczyć
+                        pełną listę jego ticketów i sprawdzić, czy średnią zawyżył pojedynczy przypadek.
+                    </p>
+                    <div class="bd-controls">
+                        <div class="field">
+                            <label>Priorytety</label>
+                            <div class="msel" id="pr-priority-msel"></div>
+                        </div>
+                        <div class="field">
+                            <label>Działy</label>
+                            <div class="msel" id="pr-dept-msel"></div>
+                        </div>
+                        <div class="field">
+                            <label>Konta</label>
+                            <label class="switch">
+                                <input type="checkbox" id="pr-active">
+                                <span class="slider"></span>
+                                <span class="switch-label" id="pr-active-label">wszystkie</span>
+                            </label>
+                        </div>
+                    </div>
+                    <p class="section-hint" id="pr-note"></p>
+                    <div class="table-scroll">
+                        <table class="grid" id="pr-ranking-table">
+                            <thead>
+                                <tr>
+                                    <th>Pracownik</th><th>Ticketów</th>
+                                    <th>Śr. czas 1. odp.</th><th>Najgorszy przypadek</th>
+                                    <th>Śr. czas rozwiązania</th><th>Najgorszy przypadek</th>
+                                </tr>
+                            </thead>
+                            <tbody><tr><td colspan="6" class="muted">Ładowanie…</td></tr></tbody>
+                        </table>
+                    </div>
+                    <div id="pr-detail" class="pr-detail" hidden>
+                        <div class="pr-detail-head">
+                            <h3 id="pr-detail-title">Tickety pracownika</h3>
+                            <button type="button" class="secondary" id="pr-detail-close">Zwiń</button>
+                        </div>
+                        <p class="section-hint">Posortowane od najdłuższego czasu rozwiązania — wiersz zaznaczony na czerwono to ten, który najbardziej zawyżył średnią.</p>
+                        <div class="table-scroll">
+                            <table class="grid" id="pr-detail-table">
+                                <thead>
+                                    <tr><th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Priorytet</th><th>Otwarcie</th><th>Czas do 1. odp.</th><th>Zamknięcie</th><th>Czas rozwiązania</th></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
 
                 <section class="card">
                     <h2>Zamknięte zgłoszenia o wybranym priorytecie</h2>
@@ -194,8 +253,8 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                             </select>
                         </div>
                         <div class="field bd-staff-only">
-                            <label for="bd-dept">Działy (wielokrotny wybór)</label>
-                            <select id="bd-dept" multiple size="4"></select>
+                            <label>Działy</label>
+                            <div class="msel" id="bd-dept-msel"></div>
                         </div>
                         <div class="field bd-staff-only">
                             <label>Konta</label>

@@ -494,6 +494,161 @@ function report_breakdown(string $dimension, string $metric, ?string $from, ?str
     return db_rows($sql, $types, $params);
 }
 
+/**
+ * Priorytetowe, zamknięte tickety per agent — surowe wiersze do „drążenia".
+ * Front agreguje je na agentów, liczy średnie/maksima i wskazuje winny ticket.
+ *
+ * @param int[]  $priorityIds  które priorytety liczymy (puste = wszystkie)
+ * @param int[]  $deptIds      filtr działów agenta (puste = wszystkie)
+ * @param bool   $activeOnly   tylko aktywne konta agentów
+ */
+function report_priority_tickets(array $priorityIds, ?string $from, ?string $to,
+                                 array $deptIds = [], bool $activeOnly = false, int $limit = 6000): array
+{
+    $ps     = schema_priority_source();
+    $priCol = reports_priority_expr($ps);
+    if ($priCol === null) {
+        return [];
+    }
+    $hasCdata = $ps['joinOnTicket'];
+
+    $T  = tbl('ticket');
+    $S  = tbl('ticket_status');
+    $PR = tbl('ticket_priority');
+    $CD = tbl('ticket__cdata');
+    $U  = tbl('user');
+    $ST = tbl('staff');
+
+    $types = '';
+    $params = [];
+
+    $sql = "SELECT
+                t.number,
+                st.staff_id,
+                TRIM(CONCAT(COALESCE(st.firstname,''),' ',COALESCE(st.lastname,''))) AS agent,
+                st.isactive,
+                " . ($hasCdata ? 'cd.subject' : 'NULL') . " AS subject,
+                u.name AS submitter,
+                t.created AS opened_at,
+                t.closed  AS closed_at,
+                pr.priority_desc AS priority_name,
+                CASE WHEN fr.first_response_at IS NOT NULL
+                     THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) ELSE NULL END AS first_response_seconds,
+                TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds
+            FROM $T t
+            JOIN $S s ON s.id = t.status_id AND s.state = 'closed' ";
+    if ($hasCdata) {
+        $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
+    }
+    $sql .= " LEFT JOIN $PR pr ON pr.priority_id = $priCol
+              LEFT JOIN $U u   ON u.id = t.user_id
+              LEFT JOIN $ST st ON st.staff_id = t.staff_id "
+         . reports_first_response_join()
+         . " WHERE t.closed IS NOT NULL AND t.staff_id > 0 ";
+
+    if (!empty($priorityIds)) {
+        $place = implode(',', array_fill(0, count($priorityIds), '?'));
+        $sql .= " AND $priCol IN ($place) ";
+        foreach ($priorityIds as $id) { $types .= 'i'; $params[] = (int) $id; }
+    }
+    if (!empty($deptIds)) {
+        $place = implode(',', array_fill(0, count($deptIds), '?'));
+        $sql .= " AND st.dept_id IN ($place) ";
+        foreach ($deptIds as $id) { $types .= 'i'; $params[] = (int) $id; }
+    }
+    if ($activeOnly) {
+        $sql .= ' AND st.isactive = 1 ';
+    }
+    $sql .= reports_range('t.closed', $from, $to, $types, $params);
+
+    $limit = max(1, min($limit, 20000));
+    $sql  .= ' ORDER BY resolution_seconds DESC LIMIT ' . $limit;
+
+    return db_rows($sql, $types, $params);
+}
+
+/**
+ * Ranking pracowników na priorytetowych zgłoszeniach: dla każdego agenta liczy
+ * średni czas 1. odpowiedzi i średni czas rozwiązania, a do KAŻDEJ z tych
+ * średnich wskazuje konkretny ticket, który miał najdłuższy czas — żeby było
+ * widać na pierwszy rzut oka, czy średnią zawyżył jeden odstający przypadek,
+ * czy to systemowy problem agenta.
+ *
+ * Zwraca ['summary' => [...ranking...], 'tickets' => [...surowe wiersze...]]
+ * — 'tickets' służy do rozwinięcia pełnej listy danego agenta na froncie.
+ */
+function report_priority_ranking(array $priorityIds, ?string $from, ?string $to,
+                                  array $deptIds = [], bool $activeOnly = false): array
+{
+    $rows = report_priority_tickets($priorityIds, $from, $to, $deptIds, $activeOnly);
+
+    $agents = [];
+    foreach ($rows as $r) {
+        $id = (int) $r['staff_id'];
+        if (!isset($agents[$id])) {
+            $agents[$id] = [
+                'staff_id' => $id,
+                'agent'    => $r['agent'] !== '' ? $r['agent'] : '(bez nazwy)',
+                'isactive' => (int) $r['isactive'],
+                'count'    => 0,
+                'fr_sum'   => 0, 'fr_count'  => 0, 'fr_max'  => null, 'fr_max_ticket'  => null,
+                'res_sum'  => 0, 'res_count' => 0, 'res_max' => null, 'res_max_ticket' => null,
+            ];
+        }
+        $a = &$agents[$id];
+        $a['count']++;
+
+        if ($r['first_response_seconds'] !== null) {
+            $sec = (int) $r['first_response_seconds'];
+            $a['fr_sum'] += $sec;
+            $a['fr_count']++;
+            if ($a['fr_max'] === null || $sec > $a['fr_max']) {
+                $a['fr_max'] = $sec;
+                $a['fr_max_ticket'] = [
+                    'number' => $r['number'], 'subject' => $r['subject'], 'submitter' => $r['submitter'],
+                    'opened_at' => $r['opened_at'], 'closed_at' => $r['closed_at'],
+                    'priority_name' => $r['priority_name'], 'seconds' => $sec,
+                ];
+            }
+        }
+        if ($r['resolution_seconds'] !== null) {
+            $sec = (int) $r['resolution_seconds'];
+            $a['res_sum'] += $sec;
+            $a['res_count']++;
+            if ($a['res_max'] === null || $sec > $a['res_max']) {
+                $a['res_max'] = $sec;
+                $a['res_max_ticket'] = [
+                    'number' => $r['number'], 'subject' => $r['subject'], 'submitter' => $r['submitter'],
+                    'opened_at' => $r['opened_at'], 'closed_at' => $r['closed_at'],
+                    'priority_name' => $r['priority_name'], 'seconds' => $sec,
+                ];
+            }
+        }
+        unset($a);
+    }
+
+    $summary = [];
+    foreach ($agents as $a) {
+        $summary[] = [
+            'staff_id' => $a['staff_id'],
+            'agent'    => $a['agent'],
+            'isactive' => $a['isactive'],
+            'count'    => $a['count'],
+            'avg_first_response_seconds' => $a['fr_count'] ? (int) round($a['fr_sum'] / $a['fr_count']) : null,
+            'max_first_response_seconds' => $a['fr_max'],
+            'max_first_response_ticket'  => $a['fr_max_ticket'],
+            'avg_resolution_seconds'     => $a['res_count'] ? (int) round($a['res_sum'] / $a['res_count']) : null,
+            'max_resolution_seconds'     => $a['res_max'],
+            'max_resolution_ticket'      => $a['res_max_ticket'],
+        ];
+    }
+    usort($summary, function ($x, $y) {
+        return ($y['avg_resolution_seconds'] ?? -1) <=> ($x['avg_resolution_seconds'] ?? -1);
+    });
+
+    return ['summary' => $summary, 'tickets' => $rows];
+}
+
 // ---------------------------------------------------------------------------
 // Oceny ticketów (gwiazdki 1–5, liczone ze znaków w polu cdata)
 // ---------------------------------------------------------------------------

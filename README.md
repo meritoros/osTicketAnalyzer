@@ -86,9 +86,18 @@ samym serwerze** co osTicket — i tam też wgrywamy ten projekt.
   rozwiązania, średni czas 1. odpowiedzi), rozkład wg priorytetu, średni czas
   rozwiązania wg priorytetu, zamknięte w czasie oraz zamknięte wg działu. Ta sekcja
   filtruje po **dacie zamknięcia** ticketu, reszta panelu po dacie zgłoszenia.
+- **Ranking pracowników — priorytetowe zgłoszenia** (zakładka *Priorytety*): dla
+  każdego agenta liczy **jednocześnie** średni czas do pierwszej odpowiedzi i średni
+  czas do faktycznego zamknięcia ticketa (żeby „odpisał i zniknął" nie dawało dobrego
+  wyniku). Najgorszy agent jest oznaczony czerwoną plakietką, wiersze wyraźnie powyżej
+  mediany — żółtą. Klik w wiersz albo w przycisk „najgorszy przypadek" rozwija pełną
+  listę ticketów danego agenta z podświetleniem tego, który najbardziej zawyżył
+  średnią — więc od razu widać, czy to systemowy problem, czy pojedynczy odstający
+  ticket. Filtr priorytetów i działów przez rozwijane listy z checkboxami.
 
 Wszystko z filtrem zakresu dat. Kolory trzymają się jednego systemu wokół brandowej
 zieleni `#44BE78`; priorytety kolorowane wg wagi (niski→zielony … krytyczny→czerwony).
+Pulpit jest podzielony na zakładki: Przegląd / Priorytety / Pracownicy / Oceny / Diagnostyka.
 
 ## Skąd biorą się dane (tabele osTicketa)
 

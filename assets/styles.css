@@ -117,6 +117,13 @@ code {
 .card > .muted { margin-top: 0; }
 .section-hint { font-size: .85rem; color: var(--muted); margin: 2px 0 14px; }
 
+/* Karta z akcentem — dla najważniejszego raportu na zakładce. */
+.highlight-card { border: 1px solid #cdeedd; box-shadow: 0 4px 18px rgba(47,156,99,.10), var(--shadow-sm); position: relative; }
+.highlight-card::before {
+    content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; border-radius: var(--radius) var(--radius) 0 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
 /* ===== Filtry ===== */
 .filters { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
 .field { display: flex; flex-direction: column; gap: 5px; }
@@ -180,10 +187,18 @@ table.kv td:first-child { color: var(--muted); width: 240px; }
 .muted { color: var(--muted); }
 .ok { color: var(--good); }
 .error { color: var(--danger); }
-.banner { padding: 12px 14px; border-radius: 10px; margin: 0 0 14px; border: 1px solid var(--border); font-size: .9rem; }
+.banner { padding: 12px 14px; border-radius: 10px; margin: 0 0 14px; border: 1px solid var(--border); font-size: .9rem; line-height: 1.55; }
 .banner.info { background: #eef5ff; border-color: #cfe0ff; color: #274690; }
 .banner.warn { background: #fff7e6; border-color: #ffe2a8; color: #8a5a00; }
 .banner.error { background: #fdecec; border-color: #f7c4c4; color: #a12626; }
+
+/* Przycisk wyglądający jak link, wtopiony w tekst (np. w bannerze). */
+.linklike {
+    background: none; border: none; box-shadow: none; padding: 0;
+    color: inherit; font: inherit; font-weight: 700; text-decoration: underline;
+    cursor: pointer; display: inline; margin-left: 4px;
+}
+.linklike:hover { background: none; opacity: .8; }
 
 /* ===== Zakładki wymiaru ===== */
 .dim-tabs { display: inline-flex; gap: 4px; background: var(--panel-2); padding: 4px; border-radius: 11px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -195,7 +210,58 @@ table.kv td:first-child { color: var(--muted); width: 240px; }
 .dim-tab.active { background: #fff; color: var(--accent-2); box-shadow: var(--shadow-sm); }
 
 .bd-controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; margin-bottom: 8px; }
-select[multiple] { min-width: 210px; }
+
+/* ===== Komponent: rozwijana lista z checkboxami (msel) ===== */
+.msel { position: relative; min-width: 200px; }
+.msel-toggle {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    width: 100%; background: #fff; color: var(--text); border: 1px solid var(--border);
+    border-radius: 9px; padding: 9px 11px; font-size: .89rem; font-weight: 600;
+    cursor: pointer; box-shadow: none; font-family: inherit;
+}
+.msel-toggle:hover { border-color: #c9d2e0; }
+.msel.open .msel-toggle { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint); }
+.msel-chevron { width: 16px; height: 16px; color: var(--muted); flex: 0 0 auto; transition: transform .15s ease; }
+.msel.open .msel-chevron { transform: rotate(180deg); }
+.msel-panel {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: max-content; min-width: 100%;
+    background: #fff; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg);
+    padding: 8px; max-height: 260px; display: flex; flex-direction: column;
+}
+.msel-actions { display: flex; gap: 6px; padding: 2px 2px 8px; border-bottom: 1px solid var(--border-soft); margin-bottom: 6px; }
+.msel-actions button {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text-soft);
+    font-size: .76rem; font-weight: 600; padding: 5px 9px; border-radius: 7px; cursor: pointer; box-shadow: none;
+}
+.msel-actions button:hover { background: var(--accent-tint); color: var(--accent-2); }
+.msel-options { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.msel-option {
+    display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 7px;
+    font-size: .87rem; cursor: pointer; white-space: nowrap;
+}
+.msel-option:hover { background: var(--panel-2); }
+.msel-option input { accent-color: var(--accent); width: 15px; height: 15px; flex: 0 0 auto; }
+
+/* ===== Wiersze wyróżnione (ranking priorytetowy) ===== */
+tr.row-worst { background: #fdecec !important; }
+tr.row-worst:hover { background: #fce0e0 !important; }
+tr.row-warn { background: #fff6e8 !important; }
+tr.row-warn:hover { background: #ffefd4 !important; }
+tr[data-staff] { cursor: pointer; }
+.badge-worst {
+    display: inline-flex; align-items: center; gap: 4px; background: var(--danger); color: #fff;
+    font-size: .68rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; letter-spacing: .01em;
+}
+.linklike-cell {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text-soft);
+    font-size: .8rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; cursor: pointer;
+    box-shadow: none; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.linklike-cell:hover { background: #fdecec; border-color: #f3caca; color: #a12626; }
+
+.pr-detail { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--border); }
+.pr-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.pr-detail-head h3 { margin: 0; font-size: .95rem; font-weight: 700; }
 
 /* ===== Priorytet: znacznik ===== */
 .pri-h { display: inline-flex; align-items: center; gap: 7px; }

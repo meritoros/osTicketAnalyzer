@@ -35,6 +35,18 @@ $in = function (string $key, $default = null) use ($body) {
     return $default;
 };
 
+/** Wyciąga tablicę liczb całkowitych z body (tablica) albo GET (klucz[]=..). */
+$inIntArray = function (string $key) use ($body) {
+    $raw = $body[$key] ?? ($_GET[$key] ?? []);
+    $out = [];
+    if (is_array($raw)) {
+        foreach ($raw as $v) {
+            if (is_numeric($v)) { $out[] = (int) $v; }
+        }
+    }
+    return $out;
+};
+
 // --- Tryb 'prompt': użyj danych do bazy przysłanych z okienka -----------------
 $mode = (string) cfg('db.mode', 'config');
 if ($mode === 'prompt') {
@@ -121,19 +133,19 @@ try {
             if (!in_array($metric, ['avg_resolution', 'sum_resolution', 'avg_first_response', 'count'], true)) {
                 $metric = 'avg_resolution';
             }
-            // dept_ids: tablica z body albo z GET (dept_ids[]=..)
-            $deptIds = [];
-            $rawDept = $body['dept_ids'] ?? ($_GET['dept_ids'] ?? []);
-            if (is_array($rawDept)) {
-                foreach ($rawDept as $d) {
-                    if (is_numeric($d)) { $deptIds[] = (int) $d; }
-                }
-            }
+            $deptIds = $inIntArray('dept_ids');
             $activeOnly = (string) $in('active_only', '1') !== '0';
             json_response([
                 'data' => report_breakdown($dimension, $metric, $from, $to, $deptIds, $activeOnly),
                 'meta' => ['dimension' => $dimension, 'metric' => $metric, 'is_time' => reports_metric_is_time($metric)],
             ]);
+            break;
+
+        case 'priority_ranking':
+            $priorityIds = $inIntArray('priority_ids');
+            $deptIds     = $inIntArray('dept_ids');
+            $activeOnly  = (string) $in('active_only', '0') !== '0';
+            json_response(['data' => report_priority_ranking($priorityIds, $from, $to, $deptIds, $activeOnly)]);
             break;
 
         case 'ratings':
