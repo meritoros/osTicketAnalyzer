@@ -82,6 +82,22 @@ table.kv td:first-child { color: var(--muted); width: 220px; }
 .banner.warn { background: rgba(251,191,36,.12); border-color: var(--warn); }
 .banner.error { background: rgba(248,113,113,.12); border-color: var(--error); }
 
+/* Modal (okienko z danymi do bazy) */
+.modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px;
+}
+.modal-overlay[hidden] { display: none; }
+.modal-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px; width: 380px; max-width: 100%; display: flex; flex-direction: column; gap: 10px;
+}
+.modal-card h2 { margin: 0; font-size: 1.1rem; }
+.modal-card .field { width: 100%; }
+.modal-card .field input { width: 100%; }
+.modal-actions { display: flex; gap: 10px; margin-top: 6px; }
+[hidden] { display: none !important; }
+
 /* Logowanie */
 .login-page { display: flex; min-height: 100vh; align-items: center; justify-content: center; }
 .login-card {

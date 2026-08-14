@@ -24,6 +24,28 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
 
 <main class="container">
 
+    <!-- Okienko na dane do bazy (tryb testowy 'prompt') -->
+    <div id="creds-modal" class="modal-overlay" hidden>
+        <form class="modal-card" id="creds-form" autocomplete="off">
+            <h2>Dane do bazy (tryb testowy)</h2>
+            <p class="muted">
+                Wpisywane dane trafiają tylko do tej sesji przeglądarki i są wysyłane do
+                backendu przez HTTPS — <strong>nic nie jest zapisywane</strong> na serwerze ani w repo.
+            </p>
+            <div class="field"><label>Host</label><input id="c-host" value="localhost"></div>
+            <div class="field"><label>Nazwa bazy</label><input id="c-name" placeholder="serwer42725_..." required></div>
+            <div class="field"><label>Użytkownik</label><input id="c-user" placeholder="serwer42725_pomoc" required></div>
+            <div class="field"><label>Hasło</label><input id="c-pass" type="password" required></div>
+            <div class="field"><label>Prefiks tabel</label><input id="c-prefix" value="ost_"></div>
+            <p class="error" id="creds-error" hidden></p>
+            <div class="modal-actions">
+                <button type="submit" id="creds-submit">Połącz i sprawdź</button>
+                <button type="button" class="secondary" id="creds-forget" hidden>Zapomnij dane</button>
+            </div>
+            <p class="muted" id="creds-status"></p>
+        </form>
+    </div>
+
     <section class="filters card">
         <div class="field">
             <label for="f-from">Od</label>
@@ -85,6 +107,12 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
 
 </main>
 
+<script>
+    window.OSTA = {
+        mode: <?= json_encode((string) cfg('db.mode', 'config')) ?>,
+        authEnabled: <?= auth_enabled() ? 'true' : 'false' ?>
+    };
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="assets/app.js"></script>
 </body>

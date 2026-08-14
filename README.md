@@ -50,6 +50,27 @@ samym serwerze** co osTicket — i tam też wgrywamy ten projekt.
 
 5. **Wejdź na `index.php`** — dashboard z raportami.
 
+## Dwa tryby podawania danych do bazy (`db.mode`)
+
+| Tryb | Kiedy | Skąd dane do bazy |
+|---|---|---|
+| `prompt` | **test** | wpisujesz w **okienku w przeglądarce**; trzymane tylko w `sessionStorage`, wysyłane do backendu przez HTTPS przy każdym zapytaniu, **nic nie jest zapisywane** na serwerze ani w repo |
+| `config` | **produkcja** | z `config.php` na serwerze (nikt nie wpisuje haseł ręcznie) |
+
+> ⚠️ **Ważne — gdzie to uruchomić:** przeglądarka nie potrafi połączyć się z MySQL,
+> a baza osTicketa na lh.pl stoi na `localhost`. Dlatego **backend (PHP) musi działać na
+> lh.pl** — również w trybie testowym. GitHub trzyma kod, ale nie wykona zapytań do bazy.
+> Test = wgraj projekt na tymczasową poddomenę lh.pl z `db.mode = 'prompt'`.
+
+**Test krok po kroku:**
+1. Wgraj pliki na poddomenę lh.pl (np. `test.twojadomena/`).
+2. `cp config.example.php config.php`, ustaw `'mode' => 'prompt'` (pola `name/user/pass`
+   mogą zostać puste — podasz je w okienku). Używaj tylko na **HTTPS**.
+3. Wejdź na `index.php` — pojawi się okienko na dane bazy. Kliknij „Połącz i sprawdź":
+   od razu zobaczysz, czy się łączy i jaką wykryto wersję/prefiks.
+4. Gdy wszystko działa → zmień `'mode' => 'config'`, wpisz dane do `config.php` na stałe
+   i ustaw hasło panelu. Tryb testowy przestaje pytać o dane.
+
 ## Co pokazuje panel
 
 - **Raport główny (dla kierownika):** zamknięte zgłoszenia o wybranym priorytecie

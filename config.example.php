@@ -13,6 +13,13 @@ return [
 
     // --- Połączenie z bazą osTicketa ---------------------------------------
     'db' => [
+        // Tryb podawania danych do bazy:
+        //   'config' — dane z tego pliku (produkcja; nikt nie wpisuje haseł).
+        //   'prompt' — TEST: dane wpisujesz w okienku w przeglądarce; nic nie jest
+        //              zapisywane na serwerze, a pola name/user/pass poniżej mogą
+        //              zostać puste. Używaj wyłącznie na HTTPS.
+        'mode'    => getenv('OSTA_DB_MODE') ?: 'config',
+
         // Na lh.pl baza jest na localhost przez socket UNIX.
         'host'    => getenv('OSTA_DB_HOST') ?: 'localhost',
 

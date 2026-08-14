@@ -3,18 +3,55 @@
  * API JSON. Przeglądarka pobiera stąd gotowe, policzone dane —
  * nigdy nie łączy się z bazą bezpośrednio.
  *
- * Przykład: api.php?report=high_priority_closed&priority_id=3&from=2026-01-01&to=2026-08-14
+ * Tryb 'config'  : dane do bazy z config.php.
+ * Tryb 'prompt'  : dane do bazy przychodzą w body zapytania (POST JSON, klucz "db")
+ *                  i są używane tylko na czas tego żądania — nic nie jest zapisywane.
+ *
+ * Przykład (GET, tryb config):
+ *   api.php?report=high_priority_closed&priority_id=3&from=2026-01-01&to=2026-08-14
  */
 
 require __DIR__ . '/lib/bootstrap.php';
 
 auth_require_api();
 
-$report = isset($_GET['report']) ? (string) $_GET['report'] : '';
-$from   = isset($_GET['from']) && $_GET['from'] !== '' ? (string) $_GET['from'] : null;
-$to     = isset($_GET['to'])   && $_GET['to']   !== '' ? (string) $_GET['to']   : null;
+// --- Wejście: GET (params w query) lub POST JSON (params + ewentualne db) ---
+$body = [];
+$raw  = file_get_contents('php://input');
+if ($raw !== '' && $raw !== false) {
+    $decoded = json_decode($raw, true);
+    if (is_array($decoded)) {
+        $body = $decoded;
+    }
+}
 
-// Walidacja dat: dopuszczamy tylko format YYYY-MM-DD.
+$in = function (string $key, $default = null) use ($body) {
+    if (array_key_exists($key, $body) && $body[$key] !== '') {
+        return $body[$key];
+    }
+    if (isset($_GET[$key]) && $_GET[$key] !== '') {
+        return $_GET[$key];
+    }
+    return $default;
+};
+
+// --- Tryb 'prompt': użyj danych do bazy przysłanych z okienka -----------------
+$mode = (string) cfg('db.mode', 'config');
+if ($mode === 'prompt') {
+    if (!empty($body['db']) && is_array($body['db'])) {
+        db_set_runtime_credentials($body['db']);
+    } else {
+        json_response(['error' => 'Brak danych do bazy (tryb testowy). Wpisz je w okienku.'], 400);
+    }
+}
+// W trybie 'config' ewentualne "db" z requestu jest IGNOROWANE (bezpieczeństwo).
+
+$report = (string) $in('report', '');
+$from   = $in('from');
+$to     = $in('to');
+$from   = $from !== null ? (string) $from : null;
+$to     = $to   !== null ? (string) $to   : null;
+
 foreach (['from' => $from, 'to' => $to] as $val) {
     if ($val !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $val)) {
         json_response(['error' => 'Nieprawidłowy format daty (oczekiwano YYYY-MM-DD).'], 400);
@@ -23,12 +60,16 @@ foreach (['from' => $from, 'to' => $to] as $val) {
 
 try {
     switch ($report) {
+        case 'diag': // test połączenia + podsumowanie schematu (dla okienka)
+            json_response(['data' => schema_summary()]);
+            break;
+
         case 'priorities':
             json_response(['data' => schema_priorities()]);
             break;
 
         case 'high_priority_closed':
-            $priorityId = isset($_GET['priority_id']) ? (int) $_GET['priority_id'] : 0;
+            $priorityId = (int) $in('priority_id', 0);
             if ($priorityId <= 0) {
                 json_response(['error' => 'Podaj priority_id (patrz report=priorities).'], 400);
             }
@@ -55,6 +96,10 @@ try {
             json_response(['error' => 'Nieznany raport.'], 404);
     }
 } catch (Throwable $e) {
+    // W trybie testowym pokaż powód (np. złe hasło); w produkcji tylko log.
+    $msg = ($mode === 'prompt')
+        ? $e->getMessage()
+        : 'Błąd serwera podczas liczenia raportu.';
     error_log('[osTicketAnalyzer] ' . $e->getMessage());
-    json_response(['error' => 'Błąd serwera podczas liczenia raportu.'], 500);
+    json_response(['error' => $msg], 500);
 }

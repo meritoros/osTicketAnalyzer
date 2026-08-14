@@ -1,38 +1,56 @@
 /* Front dashboardu: pobiera dane z api.php (JSON) i rysuje tabelę oraz wykresy.
-   Przeglądarka NIE łączy się z bazą — dostaje tylko policzone wyniki. */
+   Przeglądarka NIE łączy się z bazą — dostaje tylko policzone wyniki.
+
+   Tryb 'prompt': dane do bazy wpisujesz w okienku, trzymane są tylko w sessionStorage
+   i wysyłane do backendu przy każdym zapytaniu (przez HTTPS). Nic nie jest zapisywane. */
 'use strict';
 
 const $ = (sel) => document.querySelector(sel);
+const MODE = (window.OSTA && window.OSTA.mode) || 'config';
+const CREDS_KEY = 'osta_db_creds';
 
-const charts = {}; // uchwyty Chart.js, żeby móc je odświeżać
+const charts = {}; // uchwyty Chart.js
 
-// --- Pomocnicze ------------------------------------------------------------
+// --- Dane do bazy (tryb prompt) --------------------------------------------
 
-function qs(params) {
-    const p = new URLSearchParams();
-    Object.entries(params).forEach(([k, v]) => {
-        if (v !== null && v !== undefined && v !== '') p.append(k, v);
-    });
-    return p.toString();
+function getCreds() {
+    if (MODE !== 'prompt') return null;
+    try { return JSON.parse(sessionStorage.getItem(CREDS_KEY) || 'null'); }
+    catch (e) { return null; }
 }
+function setCreds(c) { sessionStorage.setItem(CREDS_KEY, JSON.stringify(c)); }
+function forgetCreds() { sessionStorage.removeItem(CREDS_KEY); }
+
+// --- Wywołania API ---------------------------------------------------------
 
 async function api(report, params = {}) {
-    const url = 'api.php?' + qs(Object.assign({ report }, params));
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    if (res.status === 401) {
-        window.location.href = 'login.php';
-        return { data: [] };
+    const payload = Object.assign({ report }, params);
+    if (MODE === 'prompt') {
+        const creds = getCreds();
+        if (!creds) throw new Error('Brak danych do bazy — wpisz je w okienku.');
+        payload.db = creds;
     }
-    const json = await res.json();
-    if (json.error) throw new Error(json.error);
+    const res = await fetch('api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (res.status === 401) { window.location.href = 'login.php'; return { data: [] }; }
+    const json = await res.json().catch(() => ({ error: 'Nieprawidłowa odpowiedź serwera.' }));
+    if (json.error) {
+        const err = new Error(json.error);
+        err.status = res.status;
+        throw err;
+    }
     return json;
 }
+
+// --- Pomocnicze ------------------------------------------------------------
 
 function currentFilters() {
     return { from: $('#f-from').value, to: $('#f-to').value };
 }
 
-/** Sekundy -> "2 g 15 min" / "45 min" / "30 s". */
 function fmtDuration(seconds) {
     if (seconds === null || seconds === undefined) return '—';
     seconds = Number(seconds);
@@ -47,9 +65,7 @@ function fmtDuration(seconds) {
     return `${s} s`;
 }
 
-function fmtDateTime(v) {
-    return v ? String(v) : '—';
-}
+function fmtDateTime(v) { return v ? String(v) : '—'; }
 
 function esc(v) {
     return String(v ?? '').replace(/[&<>"]/g, (c) =>
@@ -98,15 +114,13 @@ async function loadMain() {
                 <td>${esc(fmtDateTime(r.closed_at))}</td>
             </tr>`).join('');
     } catch (e) {
+        if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
         tbody.innerHTML = `<tr><td colspan="8" class="error">Błąd: ${esc(e.message)}</td></tr>`;
     }
 }
 
 function exportCsv() {
-    if (!lastMainRows.length) {
-        alert('Brak danych do eksportu — najpierw pokaż raport.');
-        return;
-    }
+    if (!lastMainRows.length) { alert('Brak danych do eksportu — najpierw pokaż raport.'); return; }
     const headers = ['Nr', 'Temat', 'Zglaszajacy', 'Agent',
         'Data zgloszenia', 'Pierwsza odpowiedz', 'Czas do 1. odpowiedzi (s)', 'Data zamkniecia'];
     const rows = lastMainRows.map((r) => [
@@ -117,7 +131,6 @@ function exportCsv() {
     const csv = [headers, ...rows]
         .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';'))
         .join('\r\n');
-    // BOM, by Excel poprawnie odczytał polskie znaki
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -135,7 +148,6 @@ function drawChart(id, config) {
 
 async function loadCharts() {
     const f = currentFilters();
-
     try {
         const { data } = await api('volume', f);
         drawChart('chart-volume', {
@@ -188,20 +200,16 @@ async function loadCharts() {
     } catch (e) { console.error('by_submitter', e); }
 }
 
-// --- Start -----------------------------------------------------------------
+// --- Priorytety ------------------------------------------------------------
 
 async function initPriorities() {
     const sel = $('#f-priority');
     try {
         const { data } = await api('priorities');
-        if (!data.length) {
-            sel.innerHTML = '<option value="">(brak priorytetów)</option>';
-            return;
-        }
+        if (!data.length) { sel.innerHTML = '<option value="">(brak priorytetów)</option>'; return; }
         sel.innerHTML = data.map((p) =>
             `<option value="${esc(p.priority_id)}">${esc(p.priority_desc)} (${esc(p.priority)})</option>`
         ).join('');
-        // Domyślnie wybierz priorytet "high", jeśli jest.
         const high = data.find((p) => String(p.priority).toLowerCase() === 'high');
         if (high) sel.value = String(high.priority_id);
     } catch (e) {
@@ -213,8 +221,67 @@ async function applyAll() {
     await Promise.all([loadMain(), loadCharts()]);
 }
 
+// --- Okienko z danymi do bazy (tryb prompt) --------------------------------
+
+function openCredsModal(errorMsg) {
+    const modal = $('#creds-modal');
+    if (!modal) return;
+    const err = $('#creds-error');
+    if (errorMsg) { err.textContent = errorMsg; err.hidden = false; }
+    else { err.hidden = true; }
+    $('#creds-forget').hidden = !getCreds();
+    modal.hidden = false;
+    const nameEl = $('#c-name');
+    if (nameEl) nameEl.focus();
+}
+
+function closeCredsModal() { const m = $('#creds-modal'); if (m) m.hidden = true; }
+
+function readCredsForm() {
+    return {
+        host:   $('#c-host').value.trim() || 'localhost',
+        name:   $('#c-name').value.trim(),
+        user:   $('#c-user').value.trim(),
+        pass:   $('#c-pass').value,
+        prefix: $('#c-prefix').value.trim() || 'ost_',
+    };
+}
+
+async function handleCredsSubmit(ev) {
+    ev.preventDefault();
+    const status = $('#creds-status');
+    const err = $('#creds-error');
+    err.hidden = true;
+    status.textContent = 'Łączenie…';
+
+    const creds = readCredsForm();
+    setCreds(creds); // api() weźmie je z sessionStorage
+
+    try {
+        const { data } = await api('diag');
+        const ver = data.version ? ` (osTicket ${data.version})` : '';
+        status.textContent = 'Połączono ✔' + ver;
+        // wstępnie wybierz prefiks, gdyby trzeba było poprawić
+        if (data.guessed_prefix && data.guessed_prefix !== creds.prefix) {
+            err.textContent = `Uwaga: wykryty prefiks to „${data.guessed_prefix}". Popraw pole i połącz ponownie.`;
+            err.hidden = false;
+            $('#c-prefix').value = data.guessed_prefix;
+            return;
+        }
+        closeCredsModal();
+        await initPriorities();
+        await applyAll();
+    } catch (e) {
+        forgetCreds();
+        status.textContent = '';
+        err.textContent = 'Nie udało się połączyć: ' + e.message;
+        err.hidden = false;
+    }
+}
+
+// --- Start -----------------------------------------------------------------
+
 document.addEventListener('DOMContentLoaded', async () => {
-    // Domyślny zakres: ostatnie 90 dni.
     const to = new Date();
     const from = new Date();
     from.setDate(from.getDate() - 90);
@@ -223,6 +290,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     $('#f-apply').addEventListener('click', applyAll);
     $('#f-csv').addEventListener('click', exportCsv);
+
+    if (MODE === 'prompt') {
+        $('#creds-form').addEventListener('submit', handleCredsSubmit);
+        $('#creds-forget').addEventListener('click', () => { forgetCreds(); openCredsModal(); });
+        if (!getCreds()) { openCredsModal(); return; } // czekaj na dane
+    }
 
     await initPriorities();
     await applyAll();

@@ -12,8 +12,34 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
 
 function h($v): string { return htmlspecialchars((string) $v, ENT_QUOTES); }
 
+$mode = (string) cfg('db.mode', 'config');
+
 $checks = [];
 $fatal  = null;
+
+// W trybie testowym backend nie ma danych do bazy (są podawane w okienku na dashboardzie).
+if ($mode === 'prompt') {
+    ?>
+    <!doctype html>
+    <html lang="pl"><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Diagnostyka — <?= $title ?></title>
+    <link rel="stylesheet" href="assets/styles.css"></head>
+    <body>
+    <header class="topbar"><strong><?= $title ?></strong>
+        <nav><a href="index.php">Dashboard</a><a href="diagnostics.php" class="active">Diagnostyka</a>
+        <?php if (auth_enabled()): ?><a href="logout.php">Wyloguj</a><?php endif; ?></nav>
+    </header>
+    <main class="container">
+        <div class="banner warn">
+            Aplikacja działa w <strong>trybie testowym</strong> (<code>db.mode = 'prompt'</code>).
+            Dane do bazy podajesz w okienku na <a href="index.php">dashboardzie</a>, a test połączenia
+            i podsumowanie schematu zobaczysz właśnie tam po kliknięciu „Połącz i sprawdź".
+        </div>
+    </main></body></html>
+    <?php
+    exit;
+}
 
 try {
     db(); // wymuś połączenie

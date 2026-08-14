@@ -90,13 +90,28 @@ function schema_required_tables(): array
     return $out;
 }
 
+/** Zbiorcze podsumowanie schematu (dla API/diagnostyki). */
+function schema_summary(): array
+{
+    $tables = schema_required_tables();
+    return [
+        'version'         => schema_osticket_version(),
+        'prefix'          => (string) (db_credentials()['prefix'] ?? 'ost_'),
+        'priority_source' => schema_priority_source(),
+        'tables'          => $tables,
+        'priorities'      => schema_priorities(),
+        'statuses'        => schema_statuses(),
+        'guessed_prefix'  => empty($tables[tbl('ticket')]) ? schema_guess_prefix() : null,
+    ];
+}
+
 /**
  * Jeśli prefiks z konfiguracji nie pasuje, spróbuj zgadnąć na podstawie
  * tabeli kończącej się na "ticket_status" (charakterystyczna dla osTicketa).
  */
 function schema_guess_prefix(): ?string
 {
-    $dbName = (string) ($GLOBALS['OSTA_CONFIG']['db']['name'] ?? '');
+    $dbName = db_name();
     $rows = db_rows(
         "SELECT table_name FROM information_schema.tables
          WHERE table_schema = ? AND table_name LIKE '%ticket\\_status'",
