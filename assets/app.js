@@ -316,7 +316,7 @@ async function loadCharts() {
                       borderColor: BLUE, backgroundColor: BLUE, tension: 0.25 },
                 ],
             },
-            options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
         });
     } catch (e) { console.error('volume', e); }
 
@@ -332,7 +332,7 @@ async function loadCharts() {
                     borderColor: PANEL, borderWidth: 2,
                 }],
             },
-            options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
         });
     } catch (e) { console.error('by_priority', e); }
 
@@ -345,7 +345,7 @@ async function loadCharts() {
                 datasets: [{ label: 'Tickety', data: data.map((r) => Number(r.total)),
                     backgroundColor: greenGradient(true), borderRadius: 5, maxBarThickness: 22 }],
             },
-            options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } },
+            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
         });
     } catch (e) { console.error('by_agent', e); }
 
@@ -358,7 +358,7 @@ async function loadCharts() {
                 datasets: [{ label: 'Zgłoszenia', data: data.map((r) => Number(r.total)),
                     backgroundColor: BLUE, borderRadius: 5, maxBarThickness: 22 }],
             },
-            options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } } },
+            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
         });
     } catch (e) { console.error('by_submitter', e); }
 }
@@ -463,7 +463,7 @@ async function loadClosedAnalytics() {
                 borderColor: '#1e293b', borderWidth: 2,
             }],
         },
-        options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
     });
 
     drawChart('chart-closed-restime', {
@@ -477,7 +477,7 @@ async function loadClosedAnalytics() {
             }],
         },
         options: {
-            responsive: true,
+            responsive: true, maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
                 tooltip: { callbacks: { label: (c) => ' ' + fmtDuration(byPriority[c.dataIndex].avg_resolution_seconds || 0) } },
@@ -498,7 +498,7 @@ async function loadClosedAnalytics() {
             }],
         },
         options: {
-            responsive: true,
+            responsive: true, maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
                 tooltip: { callbacks: { label: (c) => ' ' + fmtDuration(byPriority[c.dataIndex].avg_first_response_seconds || 0) } },
@@ -516,7 +516,7 @@ async function loadClosedAnalytics() {
                 borderColor: BRAND, backgroundColor: BRAND, tension: 0.25, fill: false,
             }],
         },
-        options: { responsive: true, plugins: { legend: { display: false } } },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
     });
 
     const tb = $('#closed-dept-table tbody');
@@ -886,7 +886,7 @@ async function loadRatings() {
                 backgroundColor: colors, borderRadius: 6, maxBarThickness: 70 }],
         },
         options: {
-            responsive: true,
+            responsive: true, maintainAspectRatio: false,
             onHover: (ev, els) => { ev.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
             onClick: (ev, els) => { if (els.length) loadRatingDetail(els[0].index + 1); },
             plugins: { legend: { display: false },

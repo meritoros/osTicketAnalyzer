@@ -111,8 +111,8 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                     <div class="kpi"><div class="kpi-label">Śr. czas rozwiązania</div><div class="kpi-value" id="ov-res">—</div><div class="kpi-sub">otwarcie → zamknięcie</div></div>
                 </div>
                 <div class="grid-2">
-                    <section class="card"><h2>Wolumen zgłoszeń</h2><div style="margin-top:12px"><canvas id="chart-volume" height="150"></canvas></div></section>
-                    <section class="card"><h2>Rozkład wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-priority" height="150"></canvas></div></section>
+                    <section class="card"><h2>Wolumen zgłoszeń</h2><div class="chart-box"><canvas id="chart-volume"></canvas></div></section>
+                    <section class="card"><h2>Rozkład wg priorytetu</h2><div class="chart-box"><canvas id="chart-priority"></canvas></div></section>
                 </div>
             </div>
 
@@ -213,12 +213,12 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                 </section>
 
                 <div class="grid-2">
-                    <section class="card"><h2>Śr. czas 1. odpowiedzi wg priorytetu</h2><p class="section-hint">otwarcie → pierwsza odpowiedź agenta</p><div><canvas id="chart-closed-frtime" height="150"></canvas></div></section>
-                    <section class="card"><h2>Śr. czas rozwiązania wg priorytetu</h2><p class="section-hint">otwarcie → zamknięcie</p><div><canvas id="chart-closed-restime" height="150"></canvas></div></section>
+                    <section class="card"><h2>Śr. czas 1. odpowiedzi wg priorytetu</h2><p class="section-hint">otwarcie → pierwsza odpowiedź agenta</p><div class="chart-box"><canvas id="chart-closed-frtime"></canvas></div></section>
+                    <section class="card"><h2>Śr. czas rozwiązania wg priorytetu</h2><p class="section-hint">otwarcie → zamknięcie</p><div class="chart-box"><canvas id="chart-closed-restime"></canvas></div></section>
                 </div>
                 <div class="grid-2">
-                    <section class="card"><h2>Zamknięte wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-closed-priority" height="150"></canvas></div></section>
-                    <section class="card"><h2>Zamknięte w czasie</h2><div style="margin-top:12px"><canvas id="chart-closed-time" height="150"></canvas></div></section>
+                    <section class="card"><h2>Zamknięte wg priorytetu</h2><div class="chart-box"><canvas id="chart-closed-priority"></canvas></div></section>
+                    <section class="card"><h2>Zamknięte w czasie</h2><div class="chart-box"><canvas id="chart-closed-time"></canvas></div></section>
                 </div>
 
                 <section class="card">
@@ -275,8 +275,8 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                 </section>
 
                 <div class="grid-2">
-                    <section class="card"><h2>Kto obsługuje najwięcej (agenci)</h2><div style="margin-top:12px"><canvas id="chart-agent" height="170"></canvas></div></section>
-                    <section class="card"><h2>Kto zgłasza najwięcej</h2><div style="margin-top:12px"><canvas id="chart-submitter" height="170"></canvas></div></section>
+                    <section class="card"><h2>Kto obsługuje najwięcej (agenci)</h2><div class="chart-box tall"><canvas id="chart-agent"></canvas></div></section>
+                    <section class="card"><h2>Kto zgłasza najwięcej</h2><div class="chart-box tall"><canvas id="chart-submitter"></canvas></div></section>
                 </div>
 
                 <section class="card">
@@ -302,7 +302,7 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                         <div class="kpi"><div class="kpi-label">Zamkniętych</div><div class="kpi-value" id="kpi-rating-total">—</div></div>
                     </div>
                     <p class="section-hint" style="margin-top:14px">💡 Kliknij słupek, aby przeczytać tickety z daną oceną.</p>
-                    <div><canvas id="chart-rating" height="110"></canvas></div>
+                    <div class="chart-box"><canvas id="chart-rating"></canvas></div>
                 </section>
 
                 <section class="card" id="rating-detail" hidden>

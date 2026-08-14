@@ -125,6 +125,14 @@ Pulpit jest podzielony na zakładki: Przegląd / Priorytety / Pracownicy / Oceny
   offline/bez CDN, można ją zwendorować lokalnie — do zrobienia w przyszłości.
 - Projekt jest pomyślany rozwojowo — kolejne raporty dodaje się jako funkcję w
   `lib/reports.php` i `case` w `api.php`.
+- **Responsywność:** panel działa na telefonach, tabletach, laptopach i dużych
+  monitorach (Full HD i więcej). Poniżej 900px sidebar zwija się w poziomy pasek
+  zakładek (przewijany), poniżej 640px filtry i kontrolki układają się w kolumnie,
+  a szerokie tabele zawsze mają własny poziomy scroll (`.table-scroll`) — nigdy
+  nie rozciągają całej strony. Wykresy (Chart.js) skalują się do kontenera o stałej
+  wysokości (`.chart-box`), więc nie rozciągają się ani nie ściskają przy zmianie
+  szerokości ekranu. Na ekranach ≥1600px treść wykorzystuje więcej dostępnej
+  szerokości zamiast zostawiać puste marginesy.
 
 ## Struktura projektu
 
