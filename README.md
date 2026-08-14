@@ -133,6 +133,17 @@ Pulpit jest podzielony na zakładki: Przegląd / Priorytety / Pracownicy / Oceny
   wysokości (`.chart-box`), więc nie rozciągają się ani nie ściskają przy zmianie
   szerokości ekranu. Na ekranach ≥1600px treść wykorzystuje więcej dostępnej
   szerokości zamiast zostawiać puste marginesy.
+- **Kontrola jakości — „szybka odpowiedź, późne zamknięcie"** (zakładka *Kontrola*):
+  odsiewa tickety w klasycznym wzorcu „podsyłam i zamykam" → klient wraca po
+  tygodniach/miesiącach, bo np. zapomniał pobrać plik. Suwak ustawia próg „szybkiej"
+  pierwszej odpowiedzi (np. 15 min); pokazywane są tickety, gdzie odpowiedź była
+  szybsza niż próg, ale faktyczne zamknięcie przyszło zauważalnie później —
+  posortowane od największej rozbieżności. Działa wyłącznie na danych, które i tak
+  już liczymy (czas do 1. odpowiedzi i czas do zamknięcia), więc nie zależy od
+  niepewnego schematu. Jeśli baza rejestruje historię ponownych otwarć
+  (`ost_thread_event`, nowsze osTickety), dokłada realne potwierdzenie „ile razy
+  ticket wrócił do statusu otwarty" — wykrywane automatycznie, bez zgadywania
+  nazw kolumn (patrz diagnostyka).
 
 ## Struktura projektu
 

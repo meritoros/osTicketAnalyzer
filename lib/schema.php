@@ -192,8 +192,59 @@ function schema_summary(): array
         'priorities'      => schema_priorities(),
         'statuses'        => schema_statuses(),
         'rating_field'    => schema_rating_field(),
+        'reopen_source'   => schema_reopen_event_source(),
         'guessed_prefix'  => empty($tables[tbl('ticket')]) ? schema_guess_prefix() : null,
     ];
+}
+
+/**
+ * Best-effort wykrycie, czy i jak baza rejestruje zdarzenie "ponowne otwarcie"
+ * ticketa (tabela ost_thread_event w nowszych osTicketach). Nie zakładamy na
+ * sztywno nazw kolumn — szukamy tekstowej kolumny, w której choć jeden wiersz
+ * pasuje do "reopen". Zwraca null, gdy tabeli nie ma albo nic nie pasuje —
+ * funkcje korzystające z tego wyniku muszą działać poprawnie także bez niego
+ * (odsiewanie "szybka odpowiedź, późne zamknięcie" nie zależy od tej tabeli).
+ *
+ * @return array{table:string, column:string, thread_col:string, time_col:string}|null
+ */
+function schema_reopen_event_source(): ?array
+{
+    $table = tbl('thread_event');
+    if (!db_table_exists($table)) {
+        return null;
+    }
+
+    $threadCol = db_column_exists($table, 'thread_id') ? 'thread_id' : null;
+    $timeCol   = null;
+    foreach (['timestamp', 'created', 'time'] as $c) {
+        if (db_column_exists($table, $c)) { $timeCol = $c; break; }
+    }
+    if ($threadCol === null || $timeCol === null) {
+        return null;
+    }
+
+    try {
+        $cols = db_rows(
+            "SELECT column_name FROM information_schema.columns
+             WHERE table_schema = ? AND table_name = ?
+               AND data_type IN ('varchar','char','text','tinytext','mediumtext')",
+            'ss',
+            [db_name(), $table]
+        );
+        foreach ($cols as $c) {
+            $col = $c['column_name'] ?? ($c['COLUMN_NAME'] ?? '');
+            if ($col === '' || !preg_match('/^[A-Za-z0-9_]+$/', $col)) {
+                continue;
+            }
+            $row = db_row("SELECT COUNT(*) AS c FROM `$table` WHERE `$col` LIKE ?", 's', ['%reopen%']);
+            if ($row && (int) $row['c'] > 0) {
+                return ['table' => $table, 'column' => $col, 'thread_col' => $threadCol, 'time_col' => $timeCol];
+            }
+        }
+    } catch (Throwable $e) {
+        // brak dostępu do information_schema albo nietypowy typ kolumny — pomijamy bonus
+    }
+    return null;
 }
 
 /**

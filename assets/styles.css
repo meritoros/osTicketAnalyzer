@@ -373,6 +373,24 @@ canvas { max-width: 100%; }
 .dur { display: inline-block; padding: 2px 9px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; font-size: .82rem; white-space: nowrap; }
 .dur-fr  { background: #e8f0ff; color: #1e57c0; }   /* czas do 1. odpowiedzi */
 .dur-res { background: var(--accent-tint); color: var(--accent-2); }  /* czas rozwiązania */
+.dur-gap { background: #fdecec; color: #a12626; font-weight: 800; }   /* odstęp odpowiedź→zamknięcie ("smaczek") */
+
+/* ===== Kontrola jakości: suwak progu ===== */
+.qc-controls { margin: 4px 0 16px; max-width: 480px; }
+.qc-controls label { display: block; font-size: .86rem; color: var(--text-soft); font-weight: 600; margin-bottom: 8px; }
+.qc-controls input[type="range"] {
+    width: 100%; height: 6px; border-radius: 999px; background: var(--border);
+    -webkit-appearance: none; appearance: none; cursor: pointer; padding: 0; border: none;
+}
+.qc-controls input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--accent); border: 3px solid #fff; box-shadow: 0 1px 4px rgba(16,24,40,.25); cursor: pointer;
+}
+.qc-controls input[type="range"]::-moz-range-thumb {
+    width: 20px; height: 20px; border-radius: 50%; background: var(--accent);
+    border: 3px solid #fff; box-shadow: 0 1px 4px rgba(16,24,40,.25); cursor: pointer;
+}
+.qc-threshold-scale { display: flex; justify-content: space-between; font-size: .74rem; color: var(--muted); margin-top: 4px; }
 
 /* ===== Zwijana lista ===== */
 details#main-details > summary {

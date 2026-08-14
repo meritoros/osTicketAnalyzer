@@ -57,6 +57,7 @@ $statuses   = [];
 $prioritySrc = null;
 $ratingField = null;
 $formFields  = [];
+$reopenSrc   = null;
 
 if ($fatal === null) {
     try {
@@ -67,6 +68,7 @@ if ($fatal === null) {
         $prioritySrc = schema_priority_source();
         $ratingField = schema_rating_field();
         $formFields  = schema_form_fields();
+        $reopenSrc   = schema_reopen_event_source();
         if (empty($tables[tbl('ticket')])) {
             $guessed = schema_guess_prefix();
         }
@@ -208,6 +210,20 @@ if ($fatal === null) {
                 </table>
             <?php else: ?>
                 <p class="muted">Brak tabeli pól formularza (<code><?= h(tbl('form_field')) ?></code>).</p>
+            <?php endif; ?>
+        </section>
+
+        <section class="card">
+            <h2>Ponowne otwarcia (zakładka „Kontrola jakości")</h2>
+            <?php if ($reopenSrc !== null): ?>
+                <p>Wykryto historię ponownych otwarć w <code><?= h($reopenSrc['table']) ?>.<?= h($reopenSrc['column']) ?></code> ✔
+                   — kolumna „Ponownie otwarte" pokaże rzeczywiste liczby, nie tylko odstęp czasowy.</p>
+            <?php else: ?>
+                <div class="banner warn">
+                    Nie wykryto tabeli/kolumny z historią ponownych otwarć (szukano <code><?= h(tbl('thread_event')) ?></code>
+                    z wpisami pasującymi do „reopen"). Sekcja „Kontrola jakości" i tak działa — odsiewa tickety po
+                    odstępie między pierwszą odpowiedzią a zamknięciem, tylko bez potwierdzenia z historii statusów.
+                </div>
             <?php endif; ?>
         </section>
 

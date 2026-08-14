@@ -758,3 +758,103 @@ function report_ratings_detail(int $rating, ?string $from, ?string $to, int $lim
 
     return db_rows($sql, $types, $params);
 }
+
+// ---------------------------------------------------------------------------
+// „Smaczki": szybka odpowiedź, ale bardzo późne faktyczne zamknięcie —
+// klasyczny wzorzec „podsyłam i zamykam" -> klient wraca po tygodniach/
+// miesiącach. Odsiewamy to z danych, które już mamy (czas do 1. odpowiedzi
+// i czas do zamknięcia), więc działa niezależnie od tego, czy baza w ogóle
+// rejestruje zdarzenie "ponowne otwarcie".
+// ---------------------------------------------------------------------------
+
+/**
+ * @param int $fastResponseMinutes Próg „szybkiej" pierwszej odpowiedzi (minuty) —
+ *                                 ustawiany suwakiem w interfejsie.
+ */
+function report_quick_close_gap(int $fastResponseMinutes, ?string $from, ?string $to, int $limit = 300): array
+{
+    $ps       = schema_priority_source();
+    $priCol   = reports_priority_expr($ps);
+    $hasCdata = $ps !== null && $ps['joinOnTicket'];
+
+    $T  = tbl('ticket');
+    $S  = tbl('ticket_status');
+    $PR = tbl('ticket_priority');
+    $CD = tbl('ticket__cdata');
+    $U  = tbl('user');
+    $ST = tbl('staff');
+
+    $fastSeconds   = max(1, $fastResponseMinutes) * 60;
+    $minGapSeconds = 3600; // pomijamy różnice poniżej godziny — to jeszcze nie „smaczek"
+
+    $types  = 'ii';
+    $params = [$fastSeconds, $minGapSeconds];
+
+    $sql = "SELECT
+                t.number,
+                " . ($hasCdata ? 'cd.subject' : 'NULL') . " AS subject,
+                u.name AS submitter,
+                TRIM(CONCAT(COALESCE(st.firstname,''),' ',COALESCE(st.lastname,''))) AS agent,
+                t.created AS opened_at,
+                fr.first_response_at,
+                t.closed AS closed_at,
+                pr.priority_desc AS priority_name,
+                TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) AS first_response_seconds,
+                TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds,
+                TIMESTAMPDIFF(SECOND, fr.first_response_at, t.closed) AS gap_seconds
+            FROM $T t
+            JOIN $S s ON s.id = t.status_id AND s.state = 'closed' ";
+    if ($hasCdata) {
+        $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
+    }
+    $sql .= " LEFT JOIN $PR pr ON pr.priority_id = " . ($priCol ?? 'NULL') . "
+              LEFT JOIN $U u   ON u.id = t.user_id
+              LEFT JOIN $ST st ON st.staff_id = t.staff_id "
+         . reports_first_response_join()
+         . " WHERE t.closed IS NOT NULL
+               AND fr.first_response_at IS NOT NULL
+               AND TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) <= ?
+               AND TIMESTAMPDIFF(SECOND, fr.first_response_at, t.closed) >= ? ";
+    $sql .= reports_range('t.closed', $from, $to, $types, $params);
+    $limit = max(1, min($limit, 2000));
+    $sql  .= ' ORDER BY gap_seconds DESC LIMIT ' . $limit;
+
+    $rows = db_rows($sql, $types, $params);
+
+    // Bonus (best-effort): prawdziwe zdarzenia "ponowne otwarcie", jeśli baza
+    // je rejestruje. Błąd tutaj NIE MOŻE zepsuć głównego wyniku powyżej.
+    $reopenSrc = schema_reopen_event_source();
+    if ($reopenSrc !== null && !empty($rows)) {
+        try {
+            $TH = tbl('thread');
+            $EV = $reopenSrc['table'];
+            $col = $reopenSrc['column'];
+            $threadCol = $reopenSrc['thread_col'];
+
+            $numbers = array_column($rows, 'number');
+            $place = implode(',', array_fill(0, count($numbers), '?'));
+            $counts = db_rows(
+                "SELECT t.number, COUNT(*) AS reopen_count
+                 FROM $T t
+                 JOIN $TH th ON th.object_id = t.ticket_id AND th.object_type = 'T'
+                 JOIN $EV ev ON ev.`$threadCol` = th.id AND ev.`$col` LIKE '%reopen%'
+                 WHERE t.number IN ($place)
+                 GROUP BY t.number",
+                str_repeat('s', count($numbers)),
+                $numbers
+            );
+            $byNumber = [];
+            foreach ($counts as $c) { $byNumber[$c['number']] = (int) $c['reopen_count']; }
+            foreach ($rows as &$r) { $r['reopen_count'] = $byNumber[$r['number']] ?? 0; }
+            unset($r);
+        } catch (Throwable $e) {
+            foreach ($rows as &$r) { $r['reopen_count'] = null; }
+            unset($r);
+        }
+    } else {
+        foreach ($rows as &$r) { $r['reopen_count'] = null; }
+        unset($r);
+    }
+
+    return ['data' => $rows, 'reopen_available' => $reopenSrc !== null];
+}

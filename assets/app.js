@@ -39,7 +39,7 @@ let CURRENT_DIM = 'staff';    // aktywny wymiar w sekcji „Mapa cieplna"
 let CURRENT_METRIC = 'avg_first_response'; // aktywna miara czasu w tej samej sekcji
 
 // --- Zakładki --------------------------------------------------------------
-const TAB_TITLES = { overview: 'Przegląd', priorities: 'Priorytety', people: 'Pracownicy', ratings: 'Oceny' };
+const TAB_TITLES = { overview: 'Przegląd', priorities: 'Priorytety', people: 'Pracownicy', ratings: 'Oceny', quality: 'Kontrola jakości' };
 
 function showTab(tab) {
     if (!TAB_TITLES[tab]) tab = 'overview';
@@ -926,6 +926,62 @@ async function loadRatingDetail(rating) {
     }
 }
 
+// --- Kontrola jakości: szybka odpowiedź, późne zamknięcie -------------------
+// Odsiewa tickety typu „podsyłam i zamykam" -> klient wraca po tygodniach.
+// Nie wymaga żadnej specjalnej tabeli — liczy się z czasu do 1. odpowiedzi
+// i czasu do zamknięcia, które już mamy dla każdego ticketa.
+
+function fmtThresholdMinutes(min) {
+    if (min < 60) return `${min} min`;
+    const h = min / 60;
+    return (Number.isInteger(h) ? h : h.toFixed(1)) + ' g';
+}
+
+async function loadQualityControl() {
+    const tbody = $('#qc-table tbody');
+    const minutes = Number($('#qc-threshold').value);
+    tbody.innerHTML = '<tr><td colspan="10" class="muted">Ładowanie…</td></tr>';
+
+    try {
+        const resp = await api('quick_close_gap', Object.assign({ fast_minutes: minutes }, currentFilters()));
+        const rows = resp.data || [];
+        const reopenAvailable = !!resp.reopen_available;
+
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="10" class="muted">Brak takich ticketów w wybranym okresie i przy tym progu — dobra wiadomość.</td></tr>';
+            $('#qc-note').textContent = '';
+            return;
+        }
+
+        $('#qc-note').textContent = reopenAvailable
+            ? `Znaleziono ${rows.length} ticketów · kolumna „Ponownie otwarte" pochodzi z rzeczywistej historii statusów.`
+            : `Znaleziono ${rows.length} ticketów · Twoja instalacja osTicketa nie udostępnia historii ponownych otwarć, więc ta kolumna pokazuje tylko odstęp czasowy.`;
+
+        tbody.innerHTML = rows.map((r) => {
+            const reopenCell = r.reopen_count === null || r.reopen_count === undefined
+                ? '<span class="muted">brak danych</span>'
+                : (Number(r.reopen_count) > 0
+                    ? `<span class="badge-worst" title="Liczba wykrytych ponownych otwarć">🔁 ${esc(r.reopen_count)}×</span>`
+                    : '<span class="muted">nie wykryto</span>');
+            return `<tr>
+                <td>${esc(r.number)}</td>
+                <td>${esc(r.subject || '')}</td>
+                <td>${esc(r.submitter || '')}</td>
+                <td>${esc(r.agent || '')}</td>
+                <td>${esc(r.priority_name || '')}</td>
+                <td>${esc(fmtDateTime(r.opened_at))}</td>
+                <td>${durBadge(r.first_response_seconds, 'fr')}</td>
+                <td>${esc(fmtDateTime(r.closed_at))}</td>
+                <td><span class="dur dur-gap">${esc(fmtDuration(r.gap_seconds))}</span></td>
+                <td>${reopenCell}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
+        tbody.innerHTML = `<tr><td colspan="10" class="error">Błąd: ${esc(e.message)}</td></tr>`;
+    }
+}
+
 // --- Priorytety ------------------------------------------------------------
 
 async function initPriorities() {
@@ -948,6 +1004,7 @@ async function applyAll() {
     await Promise.all([
         loadOverview(), loadMain(), loadCharts(), loadClosedAnalytics(),
         loadDepartments(), loadBreakdown(), loadRatings(), loadPriorityRanking(),
+        loadQualityControl(),
     ]);
 }
 
@@ -1078,6 +1135,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#jump-to-rollout').addEventListener('click', () => {
         $('#f-from').value = '2026-04-29';
         applyAll();
+    });
+
+    // Kontrola jakości: suwak progu — etykieta aktualizuje się na bieżąco,
+    // zapytanie leci dopiero po puszczeniu (debounce), żeby nie zasypać API.
+    let qcDebounce = null;
+    const qcSlider = $('#qc-threshold');
+    qcSlider.addEventListener('input', () => {
+        $('#qc-threshold-value').textContent = fmtThresholdMinutes(Number(qcSlider.value));
+        clearTimeout(qcDebounce);
+        qcDebounce = setTimeout(loadQualityControl, 400);
     });
 
     if (MODE === 'prompt') {

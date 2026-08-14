@@ -45,6 +45,10 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>
                 Oceny
             </a>
+            <a class="nav-item" href="#quality" data-tab="quality">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                Kontrola
+            </a>
             <a class="nav-item" href="diagnostics.php">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                 Diagnostyka
@@ -313,6 +317,38 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                                 <tr><th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Agent</th><th>Otwarcie</th><th>Czas do 1. odp.</th><th>Zamknięcie</th><th>Czas rozwiązania</th></tr>
                             </thead>
                             <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ============ ZAKŁADKA: KONTROLA JAKOŚCI ============ -->
+            <div class="tab-panel" data-tab="quality" hidden>
+                <section class="card highlight-card">
+                    <h2>🔍 Szybka odpowiedź, późne zamknięcie</h2>
+                    <p class="section-hint">
+                        Klasyczny wzorzec: agent odpowiada błyskawicznie i od razu zamyka ticket, ale klient wraca
+                        po tygodniach lub miesiącach („zapomniałem pobrać, proszę jeszcze raz") i sprawa faktycznie
+                        kończy się dużo później, niż sugeruje pierwsza odpowiedź. Poniżej: tickety, gdzie
+                        <strong>pierwsza odpowiedź</strong> była szybsza niż próg, a <strong>faktyczne zamknięcie</strong>
+                        przyszło zauważalnie później — posortowane od największej rozbieżności.
+                    </p>
+                    <div class="qc-controls">
+                        <label for="qc-threshold">Próg „szybkiej" pierwszej odpowiedzi: <strong id="qc-threshold-value">15 min</strong></label>
+                        <input type="range" id="qc-threshold" min="1" max="240" step="1" value="15">
+                        <div class="qc-threshold-scale"><span>1 min</span><span>1 g</span><span>2 g</span><span>4 g</span></div>
+                    </div>
+                    <p class="section-hint" id="qc-note"></p>
+                    <div class="table-scroll">
+                        <table class="grid" id="qc-table">
+                            <thead>
+                                <tr>
+                                    <th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Agent</th><th>Priorytet</th>
+                                    <th>Otwarcie</th><th>Pierwsza odpowiedź</th><th>Zamknięcie</th>
+                                    <th>Odstęp odpowiedź → zamknięcie</th><th>Ponownie otwarte</th>
+                                </tr>
+                            </thead>
+                            <tbody><tr><td colspan="10" class="muted">Ładowanie…</td></tr></tbody>
                         </table>
                     </div>
                 </section>

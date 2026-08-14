@@ -160,6 +160,13 @@ try {
             json_response(['data' => report_ratings_detail($rating, $from, $to)]);
             break;
 
+        case 'quick_close_gap':
+            $fastMinutes = (int) $in('fast_minutes', 15);
+            if ($fastMinutes < 1) { $fastMinutes = 1; }
+            if ($fastMinutes > 1440) { $fastMinutes = 1440; } // max 24h jako „szybka" odpowiedź
+            json_response(report_quick_close_gap($fastMinutes, $from, $to));
+            break;
+
         default:
             json_response(['error' => 'Nieznany raport.'], 404);
     }
