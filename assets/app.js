@@ -37,6 +37,19 @@ function greenGradient(horizontal) {
 let PRIORITIES = [];          // pełna lista priorytetów (kolumny w przekroju)
 let CURRENT_DIM = 'staff';    // aktywny wymiar w sekcji „Wyniki wg wymiaru"
 
+// --- Zakładki --------------------------------------------------------------
+const TAB_TITLES = { overview: 'Przegląd', priorities: 'Priorytety', people: 'Pracownicy', ratings: 'Oceny' };
+
+function showTab(tab) {
+    if (!TAB_TITLES[tab]) tab = 'overview';
+    document.querySelectorAll('.tab-panel').forEach((p) => { p.hidden = p.dataset.tab !== tab; });
+    document.querySelectorAll('.nav-item[data-tab]').forEach((n) => n.classList.toggle('active', n.dataset.tab === tab));
+    const t = document.getElementById('page-title');
+    if (t) t.textContent = TAB_TITLES[tab];
+    // wykresy narysowane w ukrytej zakładce mają zerowy rozmiar — popraw po odsłonięciu
+    requestAnimationFrame(() => { Object.values(charts).forEach((c) => { try { c.resize(); } catch (e) {} }); });
+}
+
 // Kolory wg wagi priorytetu (spójne, czytelne). Fallback, gdy brak koloru z osTicketa.
 function priorityColorByName(name) {
     const n = String(name || '').toLowerCase();
@@ -113,6 +126,12 @@ function fmtDuration(seconds) {
 
 function fmtDateTime(v) { return v ? String(v) : '—'; }
 
+// Podkreślony (wyróżniony) czas trwania — jako pigułka.
+function durBadge(seconds, kind) {
+    if (seconds === null || seconds === undefined) return '<span class="muted">—</span>';
+    return `<span class="dur dur-${kind}">${esc(fmtDuration(seconds))}</span>`;
+}
+
 function esc(v) {
     return String(v ?? '').replace(/[&<>"]/g, (c) =>
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -126,17 +145,17 @@ async function loadMain() {
     const priorityId = $('#f-priority').value;
     const tbody = $('#main-table tbody');
     if (!priorityId) {
-        tbody.innerHTML = '<tr><td colspan="8" class="muted">Wybierz priorytet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="muted">Wybierz priorytet.</td></tr>';
         return;
     }
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">Ładowanie…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="muted">Ładowanie…</td></tr>';
     try {
         const { data } = await api('high_priority_closed',
             Object.assign({ priority_id: priorityId }, currentFilters()));
         lastMainRows = data;
 
         if (!data.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="muted">Brak zgłoszeń dla wybranych kryteriów.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="muted">Brak zgłoszeń dla wybranych kryteriów.</td></tr>';
             $('#main-summary').textContent = '';
             return;
         }
@@ -156,12 +175,13 @@ async function loadMain() {
                 <td>${esc(r.agent || '')}</td>
                 <td>${esc(fmtDateTime(r.opened_at))}</td>
                 <td>${esc(fmtDateTime(r.first_response_at))}</td>
-                <td>${esc(fmtDuration(r.first_response_seconds))}</td>
+                <td>${durBadge(r.first_response_seconds, 'fr')}</td>
                 <td>${esc(fmtDateTime(r.closed_at))}</td>
+                <td>${durBadge(r.resolution_seconds, 'res')}</td>
             </tr>`).join('');
     } catch (e) {
         if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
-        tbody.innerHTML = `<tr><td colspan="8" class="error">Błąd: ${esc(e.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="error">Błąd: ${esc(e.message)}</td></tr>`;
     }
 }
 
@@ -548,6 +568,9 @@ async function loadRatings() {
     $('#rating-kpis').hidden = false;
     note.textContent = 'Ocena liczona z liczby gwiazdek (1–5). Nie wszystkie tickety są ocenione.';
 
+    // reset szczegółów przy każdym odświeżeniu
+    $('#rating-detail').hidden = true;
+
     const dist = res.distribution || [];
     const byRating = {}; dist.forEach((d) => { byRating[Number(d.rating)] = Number(d.cnt); });
     const labels = [1, 2, 3, 4, 5];
@@ -559,10 +582,47 @@ async function loadRatings() {
         data: {
             labels: labels.map((n) => n + ' ★'),
             datasets: [{ label: 'Liczba ocen', data: labels.map((n) => byRating[n] || 0),
-                backgroundColor: colors, borderRadius: 4 }],
+                backgroundColor: colors, borderRadius: 6, maxBarThickness: 70 }],
         },
-        options: { responsive: true, plugins: { legend: { display: false } } },
+        options: {
+            responsive: true,
+            onHover: (ev, els) => { ev.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+            onClick: (ev, els) => { if (els.length) loadRatingDetail(els[0].index + 1); },
+            plugins: { legend: { display: false },
+                tooltip: { callbacks: { footer: () => 'Kliknij, aby przeczytać tickety' } } },
+        },
     });
+}
+
+async function loadRatingDetail(rating) {
+    const box = $('#rating-detail');
+    const tbody = $('#rating-detail-table tbody');
+    const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+    $('#rating-detail-title').innerHTML = `Tickety z oceną <span style="color:#f0a500">${stars}</span> (${rating}/5)`;
+    box.hidden = false;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">Ładowanie…</td></tr>';
+    try {
+        const { data } = await api('ratings_detail', Object.assign({ rating }, currentFilters()));
+        if (!data.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="muted">Brak ticketów z tą oceną w wybranym okresie.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.map((r) => `
+            <tr>
+                <td>${esc(r.number)}</td>
+                <td>${esc(r.subject || '')}</td>
+                <td>${esc(r.submitter || '')}</td>
+                <td>${esc(r.agent || '')}</td>
+                <td>${esc(fmtDateTime(r.opened_at))}</td>
+                <td>${durBadge(r.first_response_seconds, 'fr')}</td>
+                <td>${esc(fmtDateTime(r.closed_at))}</td>
+                <td>${durBadge(r.resolution_seconds, 'res')}</td>
+            </tr>`).join('');
+    } catch (e) {
+        if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
+        tbody.innerHTML = `<tr><td colspan="8" class="error">Błąd: ${esc(e.message)}</td></tr>`;
+    }
 }
 
 // --- Priorytety ------------------------------------------------------------
@@ -671,6 +731,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     $('#f-apply').addEventListener('click', applyAll);
     $('#f-csv').addEventListener('click', exportCsv);
+
+    // Zakładki nawigacji
+    document.querySelectorAll('.nav-item[data-tab]').forEach((n) => {
+        n.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            const tab = n.dataset.tab;
+            if (history.replaceState) history.replaceState(null, '', '#' + tab);
+            showTab(tab);
+        });
+    });
+    const initialTab = (location.hash || '').replace('#', '');
+    showTab(TAB_TITLES[initialTab] ? initialTab : 'overview');
 
     // Sekcja „Wyniki wg wymiaru"
     $('#dim-tabs').addEventListener('click', (ev) => {

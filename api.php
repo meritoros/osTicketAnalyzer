@@ -140,6 +140,14 @@ try {
             json_response(['data' => report_ratings($from, $to)]);
             break;
 
+        case 'ratings_detail':
+            $rating = (int) $in('rating', 0);
+            if ($rating < 1 || $rating > 5) {
+                json_response(['error' => 'Ocena musi być w zakresie 1–5.'], 400);
+            }
+            json_response(['data' => report_ratings_detail($rating, $from, $to)]);
+            break;
+
         default:
             json_response(['error' => 'Nieznany raport.'], 404);
     }

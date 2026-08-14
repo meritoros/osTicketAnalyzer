@@ -33,7 +33,20 @@ body {
     color: var(--text);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    position: relative;
+    overflow-x: hidden;
 }
+
+/* ===== Animowane tło ===== */
+.bg-anim { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.bg-anim .blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .30; }
+.blob1 { width: 460px; height: 460px; background: #7fe0a8; top: -140px; left: -100px; animation: floatA 22s ease-in-out infinite; }
+.blob2 { width: 380px; height: 380px; background: #8fd0ff; top: 30%; right: -120px; animation: floatB 26s ease-in-out infinite; }
+.blob3 { width: 420px; height: 420px; background: #b9f0cf; bottom: -160px; left: 35%; animation: floatC 30s ease-in-out infinite; }
+@keyframes floatA { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(60px,40px) scale(1.1); } }
+@keyframes floatB { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-50px,50px) scale(1.08); } }
+@keyframes floatC { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(40px,-40px) scale(1.12); } }
+@media (prefers-reduced-motion: reduce) { .bg-anim .blob { animation: none; } }
 a { color: var(--accent-2); text-decoration: none; }
 a:hover { text-decoration: underline; }
 code {
@@ -42,7 +55,10 @@ code {
 }
 
 /* ===== Układ z sidebarem ===== */
-.app { display: flex; min-height: 100vh; }
+.app { display: flex; min-height: 100vh; position: relative; z-index: 1; }
+.tab-panel { animation: fadeIn .28s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tab-panel { animation: none; } }
 
 .sidebar {
     width: 244px; flex: 0 0 244px; background: var(--panel);
@@ -205,6 +221,11 @@ select[multiple] { min-width: 210px; }
 .legend-inline span { display: inline-flex; align-items: center; gap: 6px; }
 
 canvas { max-width: 100%; }
+
+/* ===== Wyróżnione czasy (pigułki) ===== */
+.dur { display: inline-block; padding: 2px 9px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; font-size: .82rem; white-space: nowrap; }
+.dur-fr  { background: #e8f0ff; color: #1e57c0; }   /* czas do 1. odpowiedzi */
+.dur-res { background: var(--accent-tint); color: var(--accent-2); }  /* czas rozwiązania */
 
 /* ===== Zwijana lista ===== */
 details#main-details > summary {

@@ -3,7 +3,6 @@ require __DIR__ . '/lib/bootstrap.php';
 auth_require_page();
 
 $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), ENT_QUOTES);
-$logo  = (string) cfg('app.logo_url', 'https://pulpit.meritoros.pl/img/client/meritoros.png');
 ?>
 <!doctype html>
 <html lang="pl">
@@ -14,6 +13,12 @@ $logo  = (string) cfg('app.logo_url', 'https://pulpit.meritoros.pl/img/client/me
     <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
+<div class="bg-anim" aria-hidden="true">
+    <span class="blob blob1"></span>
+    <span class="blob blob2"></span>
+    <span class="blob blob3"></span>
+</div>
+
 <div class="app">
 
     <aside class="sidebar">
@@ -24,9 +29,21 @@ $logo  = (string) cfg('app.logo_url', 'https://pulpit.meritoros.pl/img/client/me
             <span class="brand-name">osTicket<b>Analyzer</b></span>
         </div>
         <nav class="side-nav">
-            <a class="nav-item active" href="index.php">
+            <a class="nav-item active" href="#overview" data-tab="overview">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg>
-                Dashboard
+                Przegląd
+            </a>
+            <a class="nav-item" href="#priorities" data-tab="priorities">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22V15"/></svg>
+                Priorytety
+            </a>
+            <a class="nav-item" href="#people" data-tab="people">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Pracownicy
+            </a>
+            <a class="nav-item" href="#ratings" data-tab="ratings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14l-5-4.87 6.91-1.01L12 2z"/></svg>
+                Oceny
             </a>
             <a class="nav-item" href="diagnostics.php">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
@@ -45,7 +62,7 @@ $logo  = (string) cfg('app.logo_url', 'https://pulpit.meritoros.pl/img/client/me
 
     <div class="main">
         <header class="topbar">
-            <span class="page-title">Statystyki osTicket</span>
+            <span class="page-title" id="page-title">Przegląd</span>
             <span class="spacer"></span>
             <a href="https://pulpit.meritoros.pl" target="_blank" rel="noopener">
                 <img src="https://pulpit.meritoros.pl/img/client/meritoros.png" alt="Meritoros" class="brand-logo">
@@ -73,16 +90,10 @@ $logo  = (string) cfg('app.logo_url', 'https://pulpit.meritoros.pl/img/client/me
                 </form>
             </div>
 
-            <!-- Filtry -->
+            <!-- Filtry (wspólne dla wszystkich zakładek) -->
             <section class="filters card">
-                <div class="field">
-                    <label for="f-from">Od</label>
-                    <input type="date" id="f-from">
-                </div>
-                <div class="field">
-                    <label for="f-to">Do</label>
-                    <input type="date" id="f-to">
-                </div>
+                <div class="field"><label for="f-from">Od</label><input type="date" id="f-from"></div>
+                <div class="field"><label for="f-to">Do</label><input type="date" id="f-to"></div>
                 <div class="field">
                     <label for="f-priority">Priorytet (raport główny)</label>
                     <select id="f-priority"><option value="">— ładowanie —</option></select>
@@ -91,141 +102,155 @@ $logo  = (string) cfg('app.logo_url', 'https://pulpit.meritoros.pl/img/client/me
                 <button id="f-csv" class="secondary" title="Pobierz raport główny jako CSV">Eksport CSV</button>
             </section>
 
-            <!-- KPI: przegląd -->
-            <div class="kpi-row hero">
-                <div class="kpi accent"><div class="kpi-label">Zgłoszenia otwarte</div><div class="kpi-value" id="ov-open">—</div><div class="kpi-sub">stan bieżący</div></div>
-                <div class="kpi"><div class="kpi-label">Zamknięte (zakres)</div><div class="kpi-value" id="ov-closed">—</div><div class="kpi-sub">w wybranym okresie</div></div>
-                <div class="kpi"><div class="kpi-label">Śr. czas 1. odpowiedzi</div><div class="kpi-value" id="ov-fr">—</div><div class="kpi-sub">zamknięte w okresie</div></div>
-                <div class="kpi"><div class="kpi-label">Śr. czas rozwiązania</div><div class="kpi-value" id="ov-res">—</div><div class="kpi-sub">zamknięte w okresie</div></div>
+            <!-- ============ ZAKŁADKA: PRZEGLĄD ============ -->
+            <div class="tab-panel" data-tab="overview">
+                <div class="kpi-row hero">
+                    <div class="kpi accent"><div class="kpi-label">Zgłoszenia otwarte</div><div class="kpi-value" id="ov-open">—</div><div class="kpi-sub">stan bieżący</div></div>
+                    <div class="kpi"><div class="kpi-label">Zamknięte (zakres)</div><div class="kpi-value" id="ov-closed">—</div><div class="kpi-sub">w wybranym okresie</div></div>
+                    <div class="kpi"><div class="kpi-label">Śr. czas 1. odpowiedzi</div><div class="kpi-value" id="ov-fr">—</div><div class="kpi-sub">otwarcie → 1. odpowiedź</div></div>
+                    <div class="kpi"><div class="kpi-label">Śr. czas rozwiązania</div><div class="kpi-value" id="ov-res">—</div><div class="kpi-sub">otwarcie → zamknięcie</div></div>
+                </div>
+                <div class="grid-2">
+                    <section class="card"><h2>Wolumen zgłoszeń</h2><div style="margin-top:12px"><canvas id="chart-volume" height="150"></canvas></div></section>
+                    <section class="card"><h2>Rozkład wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-priority" height="150"></canvas></div></section>
+                </div>
             </div>
 
-            <div class="banner info">
-                ℹ️ Priorytety wdrożono w osTicket <strong>1.05.2026</strong> — zgłoszenia sprzed tej daty mają domyślny priorytet (zwykle „Normal"), więc podziały priorytetowe są miarodajne dopiero od maja 2026.
-            </div>
+            <!-- ============ ZAKŁADKA: PRIORYTETY ============ -->
+            <div class="tab-panel" data-tab="priorities" hidden>
+                <div class="banner info">
+                    ℹ️ Priorytety wdrożono w osTicket <strong>1.05.2026</strong> — zgłoszenia sprzed tej daty mają domyślny priorytet („Normal"), więc podziały priorytetowe są miarodajne dopiero od maja 2026.
+                </div>
 
-            <!-- RAPORT GŁÓWNY -->
-            <section class="card">
-                <h2>Zamknięte zgłoszenia o wybranym priorytecie</h2>
-                <p class="section-hint" id="main-summary">Czas pierwszej odpowiedzi dla zamkniętych ticketów wybranego priorytetu.</p>
-                <details id="main-details">
-                    <summary>
-                        <span class="chev" aria-hidden="true">▸</span>
-                        <span>Lista ticketów (kliknij, aby rozwinąć)</span>
-                    </summary>
-                    <div class="table-scroll" style="margin-top:14px">
-                        <table class="grid" id="main-table">
-                            <thead>
-                                <tr>
-                                    <th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Agent</th>
-                                    <th>Data zgłoszenia</th><th>Pierwsza odpowiedź</th><th>Czas do 1. odpowiedzi</th><th>Data zamknięcia</th>
-                                </tr>
-                            </thead>
-                            <tbody><tr><td colspan="8" class="muted">Wybierz priorytet i kliknij „Pokaż".</td></tr></tbody>
+                <section class="card">
+                    <h2>Zamknięte zgłoszenia o wybranym priorytecie</h2>
+                    <p class="section-hint" id="main-summary">Czasy dla zamkniętych ticketów wybranego priorytetu.</p>
+                    <details id="main-details">
+                        <summary><span class="chev" aria-hidden="true">▸</span><span>Lista ticketów (kliknij, aby rozwinąć)</span></summary>
+                        <div class="table-scroll" style="margin-top:14px">
+                            <table class="grid" id="main-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Agent</th>
+                                        <th>Otwarcie</th><th>1. odpowiedź</th><th>Czas do 1. odp.</th>
+                                        <th>Zamknięcie</th><th>Czas rozwiązania</th>
+                                    </tr>
+                                </thead>
+                                <tbody><tr><td colspan="9" class="muted">Wybierz priorytet i kliknij „Pokaż".</td></tr></tbody>
+                            </table>
+                        </div>
+                    </details>
+                </section>
+
+                <section class="card">
+                    <h2>Analityka zamkniętych ticketów</h2>
+                    <p class="section-hint">Liczone dla ticketów <strong>zamkniętych</strong> w wybranym zakresie dat.</p>
+                    <div class="kpi-row">
+                        <div class="kpi accent"><div class="kpi-label">Zamkniętych</div><div class="kpi-value" id="kpi-closed">—</div></div>
+                        <div class="kpi"><div class="kpi-label">Śr. czas rozwiązania</div><div class="kpi-value" id="kpi-resolution">—</div></div>
+                        <div class="kpi"><div class="kpi-label">Śr. czas 1. odpowiedzi</div><div class="kpi-value" id="kpi-firstresp">—</div></div>
+                        <div class="kpi"><div class="kpi-label">Z odpowiedzią</div><div class="kpi-value" id="kpi-withresp">—</div></div>
+                    </div>
+                </section>
+
+                <div class="grid-2">
+                    <section class="card"><h2>Śr. czas 1. odpowiedzi wg priorytetu</h2><p class="section-hint">otwarcie → pierwsza odpowiedź agenta</p><div><canvas id="chart-closed-frtime" height="150"></canvas></div></section>
+                    <section class="card"><h2>Śr. czas rozwiązania wg priorytetu</h2><p class="section-hint">otwarcie → zamknięcie</p><div><canvas id="chart-closed-restime" height="150"></canvas></div></section>
+                </div>
+                <div class="grid-2">
+                    <section class="card"><h2>Zamknięte wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-closed-priority" height="150"></canvas></div></section>
+                    <section class="card"><h2>Zamknięte w czasie</h2><div style="margin-top:12px"><canvas id="chart-closed-time" height="150"></canvas></div></section>
+                </div>
+
+                <section class="card">
+                    <h2>Zamknięte wg działu</h2>
+                    <div class="table-scroll" style="margin-top:12px">
+                        <table class="grid" id="closed-dept-table">
+                            <thead><tr><th>Dział</th><th>Zamkniętych</th><th>Śr. czas rozwiązania</th></tr></thead>
+                            <tbody><tr><td colspan="3" class="muted">Ładowanie…</td></tr></tbody>
                         </table>
                     </div>
-                </details>
-            </section>
-
-            <!-- WYNIKI WG WYMIARU -->
-            <section class="card">
-                <h2>Wyniki wg wymiaru</h2>
-                <div class="dim-tabs" id="dim-tabs">
-                    <button type="button" class="dim-tab active" data-dim="staff">Pracownicy</button>
-                    <button type="button" class="dim-tab" data-dim="user">Użytkownicy</button>
-                    <button type="button" class="dim-tab" data-dim="team">Zespoły</button>
-                    <button type="button" class="dim-tab" data-dim="dept">Oddziały</button>
-                </div>
-                <div class="bd-controls">
-                    <div class="field">
-                        <label for="bd-metric">Metryka</label>
-                        <select id="bd-metric">
-                            <option value="avg_resolution">Śr. czas rozwiązania</option>
-                            <option value="avg_first_response">Śr. czas 1. odpowiedzi</option>
-                            <option value="sum_resolution">Suma czasu rozwiązania</option>
-                            <option value="count">Liczba ticketów</option>
-                        </select>
-                    </div>
-                    <div class="field bd-staff-only">
-                        <label for="bd-dept">Działy (wielokrotny wybór)</label>
-                        <select id="bd-dept" multiple size="4"></select>
-                    </div>
-                    <div class="field bd-staff-only">
-                        <label>Konta</label>
-                        <label class="switch">
-                            <input type="checkbox" id="bd-active" checked>
-                            <span class="slider"></span>
-                            <span class="switch-label" id="bd-active-label">tylko włączone</span>
-                        </label>
-                    </div>
-                </div>
-                <p class="section-hint" id="bd-note"></p>
-                <div class="table-scroll">
-                    <table class="grid" id="bd-table"><thead></thead><tbody><tr><td class="muted">Ładowanie…</td></tr></tbody></table>
-                </div>
-            </section>
-
-            <!-- OCENY -->
-            <section class="card">
-                <h2>Oceny ticketów</h2>
-                <p class="section-hint" id="rating-note">Ładowanie…</p>
-                <div class="kpi-row" id="rating-kpis" hidden>
-                    <div class="kpi accent"><div class="kpi-label">Średnia ocena</div><div class="kpi-value" id="kpi-rating-avg">—</div></div>
-                    <div class="kpi"><div class="kpi-label">Ocenionych</div><div class="kpi-value" id="kpi-rating-count">—</div></div>
-                    <div class="kpi"><div class="kpi-label">% ocenionych</div><div class="kpi-value" id="kpi-rating-pct">—</div></div>
-                    <div class="kpi"><div class="kpi-label">Zamkniętych</div><div class="kpi-value" id="kpi-rating-total">—</div></div>
-                </div>
-                <div style="margin-top:16px"><canvas id="chart-rating" height="110"></canvas></div>
-            </section>
-
-            <!-- ANALITYKA ZAMKNIĘTYCH -->
-            <section class="card">
-                <h2>Analityka zamkniętych ticketów</h2>
-                <p class="section-hint">Liczone dla ticketów <strong>zamkniętych</strong> w wybranym zakresie dat.</p>
-                <div class="kpi-row">
-                    <div class="kpi accent"><div class="kpi-label">Zamkniętych</div><div class="kpi-value" id="kpi-closed">—</div></div>
-                    <div class="kpi"><div class="kpi-label">Śr. czas rozwiązania</div><div class="kpi-value" id="kpi-resolution">—</div></div>
-                    <div class="kpi"><div class="kpi-label">Śr. czas 1. odpowiedzi</div><div class="kpi-value" id="kpi-firstresp">—</div></div>
-                    <div class="kpi"><div class="kpi-label">Z odpowiedzią</div><div class="kpi-value" id="kpi-withresp">—</div></div>
-                </div>
-            </section>
-
-            <div class="grid-2">
-                <section class="card"><h2>Śr. czas 1. odpowiedzi wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-closed-frtime" height="150"></canvas></div></section>
-                <section class="card"><h2>Śr. czas rozwiązania wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-closed-restime" height="150"></canvas></div></section>
+                </section>
             </div>
 
-            <div class="grid-2">
-                <section class="card"><h2>Zamknięte wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-closed-priority" height="150"></canvas></div></section>
-                <section class="card"><h2>Zamknięte w czasie</h2><div style="margin-top:12px"><canvas id="chart-closed-time" height="150"></canvas></div></section>
+            <!-- ============ ZAKŁADKA: PRACOWNICY ============ -->
+            <div class="tab-panel" data-tab="people" hidden>
+                <section class="card">
+                    <h2>Wyniki wg wymiaru</h2>
+                    <div class="dim-tabs" id="dim-tabs">
+                        <button type="button" class="dim-tab active" data-dim="staff">Pracownicy</button>
+                        <button type="button" class="dim-tab" data-dim="user">Użytkownicy</button>
+                        <button type="button" class="dim-tab" data-dim="team">Zespoły</button>
+                        <button type="button" class="dim-tab" data-dim="dept">Oddziały</button>
+                    </div>
+                    <div class="bd-controls">
+                        <div class="field">
+                            <label for="bd-metric">Metryka</label>
+                            <select id="bd-metric">
+                                <option value="avg_resolution">Śr. czas rozwiązania</option>
+                                <option value="avg_first_response">Śr. czas 1. odpowiedzi</option>
+                                <option value="sum_resolution">Suma czasu rozwiązania</option>
+                                <option value="count">Liczba ticketów</option>
+                            </select>
+                        </div>
+                        <div class="field bd-staff-only">
+                            <label for="bd-dept">Działy (wielokrotny wybór)</label>
+                            <select id="bd-dept" multiple size="4"></select>
+                        </div>
+                        <div class="field bd-staff-only">
+                            <label>Konta</label>
+                            <label class="switch"><input type="checkbox" id="bd-active" checked><span class="slider"></span><span class="switch-label" id="bd-active-label">tylko włączone</span></label>
+                        </div>
+                    </div>
+                    <p class="section-hint" id="bd-note"></p>
+                    <div class="table-scroll">
+                        <table class="grid" id="bd-table"><thead></thead><tbody><tr><td class="muted">Ładowanie…</td></tr></tbody></table>
+                    </div>
+                </section>
+
+                <div class="grid-2">
+                    <section class="card"><h2>Kto obsługuje najwięcej (agenci)</h2><div style="margin-top:12px"><canvas id="chart-agent" height="170"></canvas></div></section>
+                    <section class="card"><h2>Kto zgłasza najwięcej</h2><div style="margin-top:12px"><canvas id="chart-submitter" height="170"></canvas></div></section>
+                </div>
+
+                <section class="card">
+                    <h2>Agenci wg działów</h2>
+                    <p class="section-hint" id="dept-summary"></p>
+                    <div id="dept-container"><p class="muted">Ładowanie…</p></div>
+                    <div class="legend-inline">
+                        <span><i class="dot on"></i> aktywny</span>
+                        <span><i class="dot off"></i> nieaktywny</span>
+                    </div>
+                </section>
             </div>
 
-            <section class="card">
-                <h2>Zamknięte wg działu</h2>
-                <div class="table-scroll" style="margin-top:12px">
-                    <table class="grid" id="closed-dept-table">
-                        <thead><tr><th>Dział</th><th>Zamkniętych</th><th>Śr. czas rozwiązania</th></tr></thead>
-                        <tbody><tr><td colspan="3" class="muted">Ładowanie…</td></tr></tbody>
-                    </table>
-                </div>
-            </section>
+            <!-- ============ ZAKŁADKA: OCENY ============ -->
+            <div class="tab-panel" data-tab="ratings" hidden>
+                <section class="card">
+                    <h2>Oceny ticketów</h2>
+                    <p class="section-hint" id="rating-note">Ładowanie…</p>
+                    <div class="kpi-row" id="rating-kpis" hidden>
+                        <div class="kpi accent"><div class="kpi-label">Średnia ocena</div><div class="kpi-value" id="kpi-rating-avg">—</div></div>
+                        <div class="kpi"><div class="kpi-label">Ocenionych</div><div class="kpi-value" id="kpi-rating-count">—</div></div>
+                        <div class="kpi"><div class="kpi-label">% ocenionych</div><div class="kpi-value" id="kpi-rating-pct">—</div></div>
+                        <div class="kpi"><div class="kpi-label">Zamkniętych</div><div class="kpi-value" id="kpi-rating-total">—</div></div>
+                    </div>
+                    <p class="section-hint" style="margin-top:14px">💡 Kliknij słupek, aby przeczytać tickety z daną oceną.</p>
+                    <div><canvas id="chart-rating" height="110"></canvas></div>
+                </section>
 
-            <div class="grid-2">
-                <section class="card"><h2>Wolumen zgłoszeń</h2><div style="margin-top:12px"><canvas id="chart-volume" height="150"></canvas></div></section>
-                <section class="card"><h2>Rozkład wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-priority" height="150"></canvas></div></section>
-                <section class="card"><h2>Kto obsługuje najwięcej (agenci)</h2><div style="margin-top:12px"><canvas id="chart-agent" height="170"></canvas></div></section>
-                <section class="card"><h2>Kto zgłasza najwięcej</h2><div style="margin-top:12px"><canvas id="chart-submitter" height="170"></canvas></div></section>
+                <section class="card" id="rating-detail" hidden>
+                    <h2 id="rating-detail-title">Tickety z oceną</h2>
+                    <div class="table-scroll" style="margin-top:12px">
+                        <table class="grid" id="rating-detail-table">
+                            <thead>
+                                <tr><th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Agent</th><th>Otwarcie</th><th>Czas do 1. odp.</th><th>Zamknięcie</th><th>Czas rozwiązania</th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
             </div>
-
-            <!-- AGENCI WG DZIAŁÓW -->
-            <section class="card">
-                <h2>Agenci wg działów</h2>
-                <p class="section-hint" id="dept-summary"></p>
-                <div id="dept-container"><p class="muted">Ładowanie…</p></div>
-                <div class="legend-inline">
-                    <span><i class="dot on"></i> aktywny</span>
-                    <span><i class="dot off"></i> nieaktywny</span>
-                </div>
-            </section>
 
         </main>
     </div>

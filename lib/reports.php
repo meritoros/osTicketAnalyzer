@@ -88,7 +88,10 @@ function report_high_priority_closed(int $priorityId, ?string $from, ?string $to
                 fr.first_response_at,
                 CASE WHEN fr.first_response_at IS NOT NULL
                      THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at)
-                     ELSE NULL END                 AS first_response_seconds
+                     ELSE NULL END                 AS first_response_seconds,
+                CASE WHEN t.closed IS NOT NULL
+                     THEN TIMESTAMPDIFF(SECOND, t.created, t.closed)
+                     ELSE NULL END                 AS resolution_seconds
              FROM $T t
              JOIN $S s ON s.id = t.status_id ";
 
@@ -553,4 +556,50 @@ function report_ratings(?string $from, ?string $to): array
         'summary'      => $summary,
         'distribution' => $distribution,
     ];
+}
+
+/** Lista zamkniętych ticketów z konkretną oceną (do „poczytania"). */
+function report_ratings_detail(int $rating, ?string $from, ?string $to, int $limit = 300): array
+{
+    $field = schema_rating_field();
+    if ($field === null) {
+        return [];
+    }
+
+    $ps       = schema_priority_source();
+    $hasCdata = $ps !== null && $ps['joinOnTicket'];
+
+    $T  = tbl('ticket');
+    $S  = tbl('ticket_status');
+    $CD = tbl('ticket__cdata');
+    $U  = tbl('user');
+    $ST = tbl('staff');
+    $ratingExpr = reports_rating_expr($field);
+
+    $types = 'i';
+    $params = [$rating];
+
+    $sql = "SELECT
+                t.number,
+                t.created  AS opened_at,
+                t.closed   AS closed_at,
+                " . ($hasCdata ? 'cd.subject' : 'NULL') . " AS subject,
+                u.name     AS submitter,
+                TRIM(CONCAT(COALESCE(st.firstname,''),' ',COALESCE(st.lastname,''))) AS agent,
+                fr.first_response_at,
+                CASE WHEN fr.first_response_at IS NOT NULL
+                     THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) ELSE NULL END AS first_response_seconds,
+                TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds
+            FROM $T t
+            JOIN $S s ON s.id = t.status_id AND s.state = 'closed'
+            LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id
+            LEFT JOIN $U u   ON u.id = t.user_id
+            LEFT JOIN $ST st ON st.staff_id = t.staff_id "
+         . reports_first_response_join()
+         . " WHERE t.closed IS NOT NULL AND ($ratingExpr) = ? ";
+    $sql .= reports_range('t.closed', $from, $to, $types, $params);
+    $limit = max(1, min($limit, 1000));
+    $sql  .= ' ORDER BY t.closed DESC LIMIT ' . $limit;
+
+    return db_rows($sql, $types, $params);
 }
