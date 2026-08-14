@@ -364,7 +364,7 @@ async function loadClosedAnalytics() {
             datasets: [{
                 label: 'Śr. czas rozwiązania (godz.)',
                 data: byPriority.map((r) => (r.avg_resolution_seconds != null ? +(r.avg_resolution_seconds / 3600).toFixed(1) : 0)),
-                backgroundColor: byPriority.map(priorityColor), borderRadius: 4,
+                backgroundColor: byPriority.map(priorityColor), borderRadius: 5, maxBarThickness: 46,
             }],
         },
         options: {
@@ -372,6 +372,27 @@ async function loadClosedAnalytics() {
             plugins: {
                 legend: { display: false },
                 tooltip: { callbacks: { label: (c) => ' ' + fmtDuration(byPriority[c.dataIndex].avg_resolution_seconds || 0) } },
+            },
+            scales: { y: { title: { display: true, text: 'godziny' } } },
+        },
+    });
+
+    // Śr. czas 1. odpowiedzi wg priorytetu
+    drawChart('chart-closed-frtime', {
+        type: 'bar',
+        data: {
+            labels: byPriority.map((r) => r.priority_name || '(brak)'),
+            datasets: [{
+                label: 'Śr. czas 1. odpowiedzi (godz.)',
+                data: byPriority.map((r) => (r.avg_first_response_seconds != null ? +(r.avg_first_response_seconds / 3600).toFixed(1) : 0)),
+                backgroundColor: byPriority.map(priorityColor), borderRadius: 5, maxBarThickness: 46,
+            }],
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: (c) => ' ' + fmtDuration(byPriority[c.dataIndex].avg_first_response_seconds || 0) } },
             },
             scales: { y: { title: { display: true, text: 'godziny' } } },
         },

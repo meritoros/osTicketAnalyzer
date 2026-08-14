@@ -206,6 +206,17 @@ select[multiple] { min-width: 210px; }
 
 canvas { max-width: 100%; }
 
+/* ===== Zwijana lista ===== */
+details#main-details > summary {
+    list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 9px;
+    font-weight: 600; color: var(--accent-2); padding: 9px 14px; border: 1px solid var(--border);
+    border-radius: 10px; background: var(--panel-2); user-select: none;
+}
+details#main-details > summary::-webkit-details-marker { display: none; }
+details#main-details > summary:hover { background: var(--accent-tint); }
+details#main-details > summary .chev { transition: transform .15s ease; display: inline-block; }
+details#main-details[open] > summary .chev { transform: rotate(90deg); }
+
 /* ===== Suwak ===== */
 .switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; padding-bottom: 5px; }
 .switch input { display: none; }

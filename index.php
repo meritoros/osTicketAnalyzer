@@ -3,7 +3,7 @@ require __DIR__ . '/lib/bootstrap.php';
 auth_require_page();
 
 $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), ENT_QUOTES);
-$logo  = (string) cfg('app.logo_url', '');
+$logo  = (string) cfg('app.logo_url', 'https://pulpit.meritoros.pl/img/client/meritoros.png');
 ?>
 <!doctype html>
 <html lang="pl">
@@ -47,9 +47,9 @@ $logo  = (string) cfg('app.logo_url', '');
         <header class="topbar">
             <span class="page-title">Statystyki osTicket</span>
             <span class="spacer"></span>
-            <?php if ($logo !== ''): ?>
-                <img src="<?= htmlspecialchars($logo, ENT_QUOTES) ?>" alt="Logo" class="brand-logo" onerror="this.style.display='none'">
-            <?php endif; ?>
+            <a href="https://pulpit.meritoros.pl" target="_blank" rel="noopener">
+                <img src="https://pulpit.meritoros.pl/img/client/meritoros.png" alt="Meritoros" class="brand-logo">
+            </a>
         </header>
 
         <main class="content">
@@ -107,17 +107,23 @@ $logo  = (string) cfg('app.logo_url', '');
             <section class="card">
                 <h2>Zamknięte zgłoszenia o wybranym priorytecie</h2>
                 <p class="section-hint" id="main-summary">Czas pierwszej odpowiedzi dla zamkniętych ticketów wybranego priorytetu.</p>
-                <div class="table-scroll">
-                    <table class="grid" id="main-table">
-                        <thead>
-                            <tr>
-                                <th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Agent</th>
-                                <th>Data zgłoszenia</th><th>Pierwsza odpowiedź</th><th>Czas do 1. odpowiedzi</th><th>Data zamknięcia</th>
-                            </tr>
-                        </thead>
-                        <tbody><tr><td colspan="8" class="muted">Wybierz priorytet i kliknij „Pokaż".</td></tr></tbody>
-                    </table>
-                </div>
+                <details id="main-details">
+                    <summary>
+                        <span class="chev" aria-hidden="true">▸</span>
+                        <span>Lista ticketów (kliknij, aby rozwinąć)</span>
+                    </summary>
+                    <div class="table-scroll" style="margin-top:14px">
+                        <table class="grid" id="main-table">
+                            <thead>
+                                <tr>
+                                    <th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Agent</th>
+                                    <th>Data zgłoszenia</th><th>Pierwsza odpowiedź</th><th>Czas do 1. odpowiedzi</th><th>Data zamknięcia</th>
+                                </tr>
+                            </thead>
+                            <tbody><tr><td colspan="8" class="muted">Wybierz priorytet i kliknij „Pokaż".</td></tr></tbody>
+                        </table>
+                    </div>
+                </details>
             </section>
 
             <!-- WYNIKI WG WYMIARU -->
@@ -184,11 +190,14 @@ $logo  = (string) cfg('app.logo_url', '');
             </section>
 
             <div class="grid-2">
-                <section class="card"><h2>Zamknięte wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-closed-priority" height="150"></canvas></div></section>
+                <section class="card"><h2>Śr. czas 1. odpowiedzi wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-closed-frtime" height="150"></canvas></div></section>
                 <section class="card"><h2>Śr. czas rozwiązania wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-closed-restime" height="150"></canvas></div></section>
             </div>
 
-            <section class="card"><h2>Zamknięte w czasie</h2><div style="margin-top:12px"><canvas id="chart-closed-time" height="110"></canvas></div></section>
+            <div class="grid-2">
+                <section class="card"><h2>Zamknięte wg priorytetu</h2><div style="margin-top:12px"><canvas id="chart-closed-priority" height="150"></canvas></div></section>
+                <section class="card"><h2>Zamknięte w czasie</h2><div style="margin-top:12px"><canvas id="chart-closed-time" height="150"></canvas></div></section>
+            </div>
 
             <section class="card">
                 <h2>Zamknięte wg działu</h2>
