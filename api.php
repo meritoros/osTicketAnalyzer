@@ -92,6 +92,14 @@ try {
             json_response(['data' => report_by_priority($from, $to)]);
             break;
 
+        case 'staff_by_department':
+            json_response(['data' => report_staff_by_department()]);
+            break;
+
+        case 'closed_analytics':
+            json_response(['data' => report_closed_analytics($from, $to)]);
+            break;
+
         default:
             json_response(['error' => 'Nieznany raport.'], 404);
     }

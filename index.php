@@ -105,6 +105,67 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
         </section>
     </div>
 
+    <!-- AGENCI WG DZIAŁÓW (aktywni / nieaktywni) -->
+    <section class="card">
+        <h2>Agenci wg działów</h2>
+        <p class="muted" id="dept-summary"></p>
+        <div id="dept-container"><p class="muted">Ładowanie…</p></div>
+        <div class="legend-inline">
+            <span><i class="dot on"></i> aktywny</span>
+            <span><i class="dot off"></i> nieaktywny</span>
+        </div>
+    </section>
+
+    <!-- ANALITYKA ZAMKNIĘTYCH TICKETÓW (filtr po dacie zamknięcia) -->
+    <section class="card">
+        <h2>Analityka zamkniętych ticketów</h2>
+        <p class="muted">Liczone dla ticketów <strong>zamkniętych</strong> w wybranym zakresie dat.</p>
+        <div class="kpi-row">
+            <div class="kpi accent">
+                <div class="kpi-label">Zamkniętych</div>
+                <div class="kpi-value" id="kpi-closed">—</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Śr. czas rozwiązania</div>
+                <div class="kpi-value" id="kpi-resolution">—</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Śr. czas 1. odpowiedzi</div>
+                <div class="kpi-value" id="kpi-firstresp">—</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Z odpowiedzią</div>
+                <div class="kpi-value" id="kpi-withresp">—</div>
+            </div>
+        </div>
+    </section>
+
+    <div class="grid-2">
+        <section class="card">
+            <h2>Zamknięte wg priorytetu</h2>
+            <canvas id="chart-closed-priority" height="150"></canvas>
+        </section>
+        <section class="card">
+            <h2>Śr. czas rozwiązania wg priorytetu</h2>
+            <canvas id="chart-closed-restime" height="150"></canvas>
+        </section>
+    </div>
+
+    <section class="card">
+        <h2>Zamknięte w czasie</h2>
+        <canvas id="chart-closed-time" height="110"></canvas>
+    </section>
+
+    <section class="card">
+        <h2>Zamknięte wg działu</h2>
+        <div class="table-scroll">
+            <table class="grid" id="closed-dept-table">
+                <thead><tr><th>Dział</th><th>Zamkniętych</th><th>Śr. czas rozwiązania</th></tr></thead>
+                <tbody><tr><td colspan="3" class="muted">Ładowanie…</td></tr></tbody>
+            </table>
+        </div>
+    </section>
+
 </main>
 
 <script>

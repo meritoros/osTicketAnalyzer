@@ -80,8 +80,15 @@ samym serwerze** co osTicket — i tam też wgrywamy ten projekt.
 - Rozkład zgłoszeń wg priorytetu
 - Kto obsługuje najwięcej ticketów (agenci)
 - Kto zgłasza najwięcej ticketów
+- **Agenci wg działów** — rozbicie na działy z oznaczeniem, czy konto agenta jest
+  **aktywne czy nieaktywne** (`ost_staff.isactive`)
+- **Analityka zamkniętych ticketów** — kafelki KPI (liczba zamkniętych, średni czas
+  rozwiązania, średni czas 1. odpowiedzi), rozkład wg priorytetu, średni czas
+  rozwiązania wg priorytetu, zamknięte w czasie oraz zamknięte wg działu. Ta sekcja
+  filtruje po **dacie zamknięcia** ticketu, reszta panelu po dacie zgłoszenia.
 
-Wszystko z filtrem zakresu dat.
+Wszystko z filtrem zakresu dat. Kolory trzymają się jednego systemu wokół brandowej
+zieleni `#44BE78`; priorytety kolorowane wg wagi (niski→zielony … krytyczny→czerwony).
 
 ## Skąd biorą się dane (tabele osTicketa)
 

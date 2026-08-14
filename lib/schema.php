@@ -54,7 +54,7 @@ function schema_priorities(): array
         return [];
     }
     return db_rows(
-        'SELECT priority_id, priority, priority_desc, priority_urgency
+        'SELECT priority_id, priority, priority_desc, priority_color, priority_urgency
          FROM ' . tbl('ticket_priority') . '
          ORDER BY priority_urgency ASC'
     );
@@ -79,7 +79,7 @@ function schema_required_tables(): array
 {
     $needed = [
         'ticket', 'ticket_status', 'ticket_priority',
-        'thread', 'thread_entry', 'user', 'staff',
+        'thread', 'thread_entry', 'user', 'staff', 'department',
     ];
     $out = [];
     foreach ($needed as $t) {
