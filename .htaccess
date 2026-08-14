@@ -1,0 +1,18 @@
+# Wyłącz listowanie katalogów
+Options -Indexes
+
+# Zablokuj bezpośredni dostęp do kodu zaplecza i danych wrażliwych.
+# (Pliki .php i tak są wykonywane, nie pokazują źródła — to dodatkowa warstwa.)
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^lib/           - [F,L]
+    RewriteRule ^\.git          - [F,L]
+    RewriteRule ^config\.php$   - [F,L]
+</IfModule>
+
+# Zablokuj dostęp do repozytorium git, gdyby ktoś sklonował do public_html
+<IfModule mod_authz_core.c>
+    <FilesMatch "^\.(git|gitignore|htaccess)">
+        Require all denied
+    </FilesMatch>
+</IfModule>

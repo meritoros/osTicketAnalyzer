@@ -1,0 +1,13 @@
+# Prawdziwa konfiguracja z danymi do bazy i hasłem — NIGDY do repo!
+/config.php
+
+# Zależności / pliki lokalne
+/vendor/
+*.log
+.DS_Store
+Thumbs.db
+
+# Edytory
+.idea/
+.vscode/
+*.swp
