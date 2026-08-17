@@ -56,10 +56,24 @@ function reports_priority_expr(?array $ps): ?string
 }
 
 /**
+ * Fragment "AND priCol IN (?,?,...)" dla wielokrotnego wyboru priorytetów.
+ * Pusta lista albo brak wykrytej kolumny priorytetu = brak filtra (wszystkie).
+ */
+function reports_priority_filter(?string $priCol, array $priorityIds, string &$types, array &$params): string
+{
+    if ($priCol === null || empty($priorityIds)) {
+        return '';
+    }
+    $place = implode(',', array_fill(0, count($priorityIds), '?'));
+    foreach ($priorityIds as $id) { $types .= 'i'; $params[] = (int) $id; }
+    return " AND $priCol IN ($place) ";
+}
+
+/**
  * RAPORT GŁÓWNY: zamknięte zgłoszenia o wybranym priorytecie
  * wraz z datą/godziną zgłoszenia, pierwszej odpowiedzi i czasem do niej.
  */
-function report_high_priority_closed(int $priorityId, ?string $from, ?string $to, int $limit = 2000): array
+function report_high_priority_closed(array $priorityIds, ?string $from, ?string $to, int $limit = 2000): array
 {
     $ps     = schema_priority_source();
     $priCol = reports_priority_expr($ps);
@@ -114,11 +128,7 @@ function report_high_priority_closed(int $priorityId, ?string $from, ?string $to
     $types  = '';
     $params = [];
 
-    if ($priCol !== null) {
-        $sql .= " AND $priCol = ? ";
-        $types .= 'i';
-        $params[] = $priorityId;
-    }
+    $sql .= reports_priority_filter($priCol, $priorityIds, $types, $params);
     $sql .= reports_date_where($from, $to, $types, $params);
 
     $limit = max(1, min($limit, 10000));
@@ -127,24 +137,37 @@ function report_high_priority_closed(int $priorityId, ?string $from, ?string $to
     return db_rows($sql, $types, $params);
 }
 
-/** Wolumen zgłoszeń dziennie: łącznie i zamknięte. */
+/**
+ * Wolumen zgłoszeń dziennie: UTWORZONE (wg daty zgłoszenia) i ZAMKNIĘTE
+ * (wg daty faktycznego zamknięcia) — to DWA różne grupowania po różnych
+ * kolumnach dat, połączone w jedną oś czasu per dzień. Liczenie „zamkniętych"
+ * po dacie UTWORZENIA (jak poprzednio) było mylące: ticket zgłoszony danego
+ * dnia często zamyka się tygodnie później, więc słupek „zamknięte" dla
+ * wczorajszych zgłoszeń zaniżał rzeczywistą liczbę zamknięć tego dnia.
+ */
 function report_volume(?string $from, ?string $to): array
 {
     $T = tbl('ticket');
     $S = tbl('ticket_status');
 
-    $types = '';
-    $params = [];
-    $sql = "SELECT DATE(t.created) AS day,
-                   COUNT(*) AS total,
-                   SUM(CASE WHEN s.state = 'closed' THEN 1 ELSE 0 END) AS closed
-            FROM $T t
-            JOIN $S s ON s.id = t.status_id
-            WHERE 1=1 ";
-    $sql .= reports_date_where($from, $to, $types, $params);
-    $sql .= ' GROUP BY DATE(t.created) ORDER BY day ASC';
+    $typesC = ''; $paramsC = [];
+    $createdSql = "SELECT DATE(t.created) AS day, COUNT(*) AS created, 0 AS closed
+                    FROM $T t
+                    WHERE 1=1 " . reports_range('t.created', $from, $to, $typesC, $paramsC)
+                 . ' GROUP BY DATE(t.created)';
 
-    return db_rows($sql, $types, $params);
+    $typesX = ''; $paramsX = [];
+    $closedSql = "SELECT DATE(t.closed) AS day, 0 AS created, COUNT(*) AS closed
+                  FROM $T t
+                  JOIN $S s ON s.id = t.status_id AND s.state = 'closed'
+                  WHERE t.closed IS NOT NULL " . reports_range('t.closed', $from, $to, $typesX, $paramsX)
+                 . ' GROUP BY DATE(t.closed)';
+
+    $sql = "SELECT day, SUM(created) AS created, SUM(closed) AS closed
+            FROM (($createdSql) UNION ALL ($closedSql)) x
+            GROUP BY day ORDER BY day ASC";
+
+    return db_rows($sql, $typesC . $typesX, array_merge($paramsC, $paramsX));
 }
 
 /** Kto obsługuje najwięcej ticketów (agent przypisany). */
@@ -215,7 +238,7 @@ function report_by_priority(?string $from, ?string $to): array
 }
 
 /**
- * Agenci (staff) w rozbiciu na działy, z informacją czy konto jest aktywne.
+ * Pracownicy (staff) w rozbiciu na działy, z informacją czy konto jest aktywne.
  * Zwraca płaską listę — grupowanie po dziale robi front.
  */
 function report_staff_by_department(): array
@@ -665,12 +688,15 @@ function reports_rating_expr(string $col): string
 }
 
 /** Analityka ocen: podsumowanie + rozkład 1–5. */
-function report_ratings(?string $from, ?string $to): array
+function report_ratings(?string $from, ?string $to, array $priorityIds = []): array
 {
     $field = schema_rating_field();
     if ($field === null) {
         return ['available' => false];
     }
+
+    $ps     = schema_priority_source();
+    $priCol = reports_priority_expr($ps);
 
     $T  = tbl('ticket');
     $S  = tbl('ticket_status');
@@ -685,6 +711,7 @@ function report_ratings(?string $from, ?string $to): array
               JOIN $S s ON s.id = t.status_id AND s.state = 'closed'
               LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id
               WHERE t.closed IS NOT NULL ";
+    $inner .= reports_priority_filter($priCol, $priorityIds, $types, $params);
     $inner .= reports_range('t.closed', $from, $to, $types, $params);
 
     $summary = db_row(
@@ -714,7 +741,7 @@ function report_ratings(?string $from, ?string $to): array
 }
 
 /** Lista zamkniętych ticketów z konkretną oceną (do „poczytania"). */
-function report_ratings_detail(int $rating, ?string $from, ?string $to, int $limit = 300): array
+function report_ratings_detail(int $rating, ?string $from, ?string $to, array $priorityIds = [], int $limit = 300): array
 {
     $field = schema_rating_field();
     if ($field === null) {
@@ -722,6 +749,7 @@ function report_ratings_detail(int $rating, ?string $from, ?string $to, int $lim
     }
 
     $ps       = schema_priority_source();
+    $priCol   = reports_priority_expr($ps);
     $hasCdata = $ps !== null && $ps['joinOnTicket'];
 
     $T  = tbl('ticket');
@@ -752,11 +780,70 @@ function report_ratings_detail(int $rating, ?string $from, ?string $to, int $lim
             LEFT JOIN $ST st ON st.staff_id = t.staff_id "
          . reports_first_response_join()
          . " WHERE t.closed IS NOT NULL AND ($ratingExpr) = ? ";
+    $sql .= reports_priority_filter($priCol, $priorityIds, $types, $params);
     $sql .= reports_range('t.closed', $from, $to, $types, $params);
     $limit = max(1, min($limit, 1000));
     $sql  .= ' ORDER BY t.closed DESC LIMIT ' . $limit;
 
     return db_rows($sql, $types, $params);
+}
+
+/** Średnia ocena per pracownik / zespół / dział (bez rozbicia na priorytety). */
+function report_ratings_breakdown(string $dimension, ?string $from, ?string $to, array $priorityIds = []): array
+{
+    $field = schema_rating_field();
+    if ($field === null) {
+        return ['available' => false, 'data' => []];
+    }
+
+    $ps     = schema_priority_source();
+    $priCol = reports_priority_expr($ps);
+
+    $T  = tbl('ticket');
+    $S  = tbl('ticket_status');
+    $CD = tbl('ticket__cdata');
+    $ratingExpr = reports_rating_expr($field);
+
+    switch ($dimension) {
+        case 'team':
+            $entId = 'tm.team_id'; $entName = 'tm.name';
+            $join  = ' LEFT JOIN ' . tbl('team') . ' tm ON tm.team_id = t.team_id ';
+            $exists = ' AND t.team_id > 0 ';
+            break;
+        case 'dept':
+            $entId = 'd.id'; $entName = "COALESCE(d.name,'(bez działu)')";
+            $join  = ' LEFT JOIN ' . tbl('department') . ' d ON d.id = t.dept_id ';
+            $exists = ' AND t.dept_id > 0 ';
+            break;
+        case 'staff':
+        default:
+            $dimension = 'staff';
+            $entId = 'st.staff_id';
+            $entName = "TRIM(CONCAT(COALESCE(st.firstname,''),' ',COALESCE(st.lastname,'')))";
+            $join  = ' LEFT JOIN ' . tbl('staff') . ' st ON st.staff_id = t.staff_id ';
+            $exists = ' AND t.staff_id > 0 ';
+            break;
+    }
+
+    $types = '';
+    $params = [];
+
+    $sql = "SELECT
+                $entId AS entity_id,
+                $entName AS entity_name,
+                COUNT(*) AS total_closed,
+                SUM(CASE WHEN ($ratingExpr) BETWEEN 1 AND 5 THEN 1 ELSE 0 END) AS rated,
+                AVG(CASE WHEN ($ratingExpr) BETWEEN 1 AND 5 THEN ($ratingExpr) END) AS avg_rating
+            FROM $T t
+            JOIN $S s ON s.id = t.status_id AND s.state = 'closed'
+            LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id "
+         . $join
+         . " WHERE t.closed IS NOT NULL " . $exists;
+    $sql .= reports_priority_filter($priCol, $priorityIds, $types, $params);
+    $sql .= reports_range('t.closed', $from, $to, $types, $params);
+    $sql .= " GROUP BY entity_id HAVING entity_id IS NOT NULL ORDER BY avg_rating ASC";
+
+    return ['available' => true, 'data' => db_rows($sql, $types, $params)];
 }
 
 // ---------------------------------------------------------------------------
@@ -771,7 +858,7 @@ function report_ratings_detail(int $rating, ?string $from, ?string $to, int $lim
  * @param int $fastResponseMinutes Próg „szybkiej" pierwszej odpowiedzi (minuty) —
  *                                 ustawiany suwakiem w interfejsie.
  */
-function report_quick_close_gap(int $fastResponseMinutes, ?string $from, ?string $to, int $limit = 300): array
+function report_quick_close_gap(int $fastResponseMinutes, ?string $from, ?string $to, array $priorityIds = [], int $limit = 300): array
 {
     $ps       = schema_priority_source();
     $priCol   = reports_priority_expr($ps);
@@ -815,6 +902,7 @@ function report_quick_close_gap(int $fastResponseMinutes, ?string $from, ?string
                AND fr.first_response_at IS NOT NULL
                AND TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) <= ?
                AND TIMESTAMPDIFF(SECOND, fr.first_response_at, t.closed) >= ? ";
+    $sql .= reports_priority_filter($priCol, $priorityIds, $types, $params);
     $sql .= reports_range('t.closed', $from, $to, $types, $params);
     $limit = max(1, min($limit, 2000));
     $sql  .= ' ORDER BY gap_seconds DESC LIMIT ' . $limit;

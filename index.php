@@ -99,8 +99,8 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                 <div class="field"><label for="f-from">Od</label><input type="date" id="f-from"></div>
                 <div class="field"><label for="f-to">Do</label><input type="date" id="f-to"></div>
                 <div class="field">
-                    <label for="f-priority">Priorytet (raport główny)</label>
-                    <select id="f-priority"><option value="">— ładowanie —</option></select>
+                    <label>Priorytety (wszędzie w panelu)</label>
+                    <div class="msel" id="f-priority-msel"></div>
                 </div>
                 <button id="f-apply">Pokaż</button>
                 <button id="f-csv" class="secondary" title="Pobierz raport główny jako CSV">Eksport CSV</button>
@@ -114,10 +114,16 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                     <div class="kpi"><div class="kpi-label">Śr. czas 1. odpowiedzi</div><div class="kpi-value" id="ov-fr">—</div><div class="kpi-sub">otwarcie → 1. odpowiedź</div></div>
                     <div class="kpi"><div class="kpi-label">Śr. czas rozwiązania</div><div class="kpi-value" id="ov-res">—</div><div class="kpi-sub">otwarcie → zamknięcie</div></div>
                 </div>
-                <div class="grid-2">
-                    <section class="card"><h2>Wolumen zgłoszeń</h2><div class="chart-box"><canvas id="chart-volume"></canvas></div></section>
-                    <section class="card"><h2>Rozkład wg priorytetu</h2><div class="chart-box"><canvas id="chart-priority"></canvas></div></section>
-                </div>
+                <section class="card">
+                    <h2>Wolumen zgłoszeń — utworzone vs zamknięte</h2>
+                    <p class="section-hint">
+                        „Utworzone" liczone wg daty zgłoszenia, „zamknięte" wg daty faktycznego zamknięcia —
+                        to dwie osobne miary dla tego samego dnia, nie saldo narastające. Gdy „zamknięte" regularnie
+                        przewyższa „utworzone", zaległości maleją; w drugą stronę — rosną.
+                    </p>
+                    <div class="chart-box lg"><canvas id="chart-volume"></canvas></div>
+                </section>
+                <section class="card"><h2>Rozkład wg priorytetu</h2><div class="chart-box"><canvas id="chart-priority"></canvas></div></section>
             </div>
 
             <!-- ============ ZAKŁADKA: PRIORYTETY ============ -->
@@ -186,7 +192,7 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                 </section>
 
                 <section class="card">
-                    <h2>Zamknięte zgłoszenia o wybranym priorytecie</h2>
+                    <h2>Zamknięte zgłoszenia o wybranych priorytetach</h2>
                     <p class="section-hint" id="main-summary">Czasy dla zamkniętych ticketów wybranego priorytetu.</p>
                     <details id="main-details">
                         <summary><span class="chev" aria-hidden="true">▸</span><span>Lista ticketów (kliknij, aby rozwinąć)</span></summary>
@@ -194,7 +200,7 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                             <table class="grid" id="main-table">
                                 <thead>
                                     <tr>
-                                        <th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Agent</th>
+                                        <th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Pracownik</th>
                                         <th>Otwarcie</th><th>1. odpowiedź</th><th>Czas do 1. odp.</th>
                                         <th>Zamknięcie</th><th>Czas rozwiązania</th>
                                     </tr>
@@ -279,12 +285,12 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                 </section>
 
                 <div class="grid-2">
-                    <section class="card"><h2>Kto obsługuje najwięcej (agenci)</h2><div class="chart-box tall"><canvas id="chart-agent"></canvas></div></section>
-                    <section class="card"><h2>Kto zgłasza najwięcej</h2><div class="chart-box tall"><canvas id="chart-submitter"></canvas></div></section>
+                    <section class="card"><h2>Kto obsługuje najwięcej (pracownicy)</h2><p class="section-hint">Top 12 wg liczby ticketów.</p><div class="chart-box tall" id="chart-agent-box"><canvas id="chart-agent"></canvas></div></section>
+                    <section class="card"><h2>Kto zgłasza najwięcej</h2><p class="section-hint">Top 12 wg liczby zgłoszeń.</p><div class="chart-box tall" id="chart-submitter-box"><canvas id="chart-submitter"></canvas></div></section>
                 </div>
 
                 <section class="card">
-                    <h2>Agenci wg działów</h2>
+                    <h2>Pracownicy wg działów</h2>
                     <p class="section-hint" id="dept-summary"></p>
                     <div id="dept-container"><p class="muted">Ładowanie…</p></div>
                     <div class="legend-inline">
@@ -309,12 +315,28 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                     <div class="chart-box"><canvas id="chart-rating"></canvas></div>
                 </section>
 
+                <section class="card">
+                    <h2>Średnia ocena wg wymiaru</h2>
+                    <div class="dim-tabs" id="rb-dim-tabs">
+                        <button type="button" class="dim-tab active" data-dim="staff">Pracownicy</button>
+                        <button type="button" class="dim-tab" data-dim="team">Zespoły</button>
+                        <button type="button" class="dim-tab" data-dim="dept">Działy</button>
+                    </div>
+                    <p class="section-hint" id="rb-note"></p>
+                    <div class="table-scroll">
+                        <table class="grid" id="rb-table">
+                            <thead><tr><th>Pracownik</th><th>Śr. ocena</th><th>Ocenionych</th><th>% ocenionych</th><th>Zamkniętych</th></tr></thead>
+                            <tbody><tr><td colspan="5" class="muted">Ładowanie…</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
+
                 <section class="card" id="rating-detail" hidden>
                     <h2 id="rating-detail-title">Tickety z oceną</h2>
                     <div class="table-scroll" style="margin-top:12px">
                         <table class="grid" id="rating-detail-table">
                             <thead>
-                                <tr><th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Agent</th><th>Otwarcie</th><th>Czas do 1. odp.</th><th>Zamknięcie</th><th>Czas rozwiązania</th></tr>
+                                <tr><th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Pracownik</th><th>Otwarcie</th><th>Czas do 1. odp.</th><th>Zamknięcie</th><th>Czas rozwiązania</th></tr>
                             </thead>
                             <tbody></tbody>
                         </table>
@@ -343,7 +365,7 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
                         <table class="grid" id="qc-table">
                             <thead>
                                 <tr>
-                                    <th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Agent</th><th>Priorytet</th>
+                                    <th>Nr</th><th>Temat</th><th>Zgłaszający</th><th>Pracownik</th><th>Priorytet</th>
                                     <th>Otwarcie</th><th>Pierwsza odpowiedź</th><th>Zamknięcie</th>
                                     <th>Odstęp odpowiedź → zamknięcie</th><th>Ponownie otwarte</th>
                                 </tr>

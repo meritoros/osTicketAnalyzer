@@ -37,6 +37,12 @@ function greenGradient(horizontal) {
 let PRIORITIES = [];          // pełna lista priorytetów (kolumny w przekroju)
 let CURRENT_DIM = 'staff';    // aktywny wymiar w sekcji „Mapa cieplna"
 let CURRENT_METRIC = 'avg_first_response'; // aktywna miara czasu w tej samej sekcji
+let F_PRIORITY_MSEL = null;   // globalny filtr priorytetów (pasek filtrów)
+let CURRENT_RB_DIM = 'staff'; // aktywny wymiar w „Średnia ocena wg wymiaru"
+
+function selectedPriorityIds() {
+    return F_PRIORITY_MSEL ? F_PRIORITY_MSEL.getSelected() : [];
+}
 
 // --- Zakładki --------------------------------------------------------------
 const TAB_TITLES = { overview: 'Przegląd', priorities: 'Priorytety', people: 'Pracownicy', ratings: 'Oceny', quality: 'Kontrola jakości' };
@@ -231,16 +237,16 @@ function esc(v) {
 let lastMainRows = [];
 
 async function loadMain() {
-    const priorityId = $('#f-priority').value;
+    const priorityIds = selectedPriorityIds();
     const tbody = $('#main-table tbody');
-    if (!priorityId) {
-        tbody.innerHTML = '<tr><td colspan="9" class="muted">Wybierz priorytet.</td></tr>';
+    if (!priorityIds.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="muted">Wybierz co najmniej jeden priorytet.</td></tr>';
         return;
     }
     tbody.innerHTML = '<tr><td colspan="9" class="muted">Ładowanie…</td></tr>';
     try {
         const { data } = await api('high_priority_closed',
-            Object.assign({ priority_id: priorityId }, currentFilters()));
+            Object.assign({ priority_ids: priorityIds }, currentFilters()));
         lastMainRows = data;
 
         if (!data.length) {
@@ -310,7 +316,7 @@ async function loadCharts() {
             data: {
                 labels: data.map((r) => r.day),
                 datasets: [
-                    { label: 'Wszystkie', data: data.map((r) => Number(r.total)),
+                    { label: 'Utworzone', data: data.map((r) => Number(r.created)),
                       borderColor: BRAND, backgroundColor: BRAND, tension: 0.25 },
                     { label: 'Zamknięte', data: data.map((r) => Number(r.closed)),
                       borderColor: BLUE, backgroundColor: BLUE, tension: 0.25 },
@@ -336,8 +342,16 @@ async function loadCharts() {
         });
     } catch (e) { console.error('by_priority', e); }
 
+    // Ograniczone do top 12 + wysokość pudełka skalowana wg liczby pozycji —
+    // przy stałej wysokości i wielu słupkach Chart.js chowa część etykiet osi Y.
+    function sizeChartBox(boxId, count) {
+        const box = document.getElementById(boxId);
+        if (box) box.style.height = Math.max(240, count * 28 + 40) + 'px';
+    }
+
     try {
-        const { data } = await api('by_agent', f);
+        const { data } = await api('by_agent', Object.assign({ limit: 12 }, f));
+        sizeChartBox('chart-agent-box', data.length);
         drawChart('chart-agent', {
             type: 'bar',
             data: {
@@ -350,7 +364,8 @@ async function loadCharts() {
     } catch (e) { console.error('by_agent', e); }
 
     try {
-        const { data } = await api('by_submitter', f);
+        const { data } = await api('by_submitter', Object.assign({ limit: 12 }, f));
+        sizeChartBox('chart-submitter-box', data.length);
         drawChart('chart-submitter', {
             type: 'bar',
             data: {
@@ -363,7 +378,7 @@ async function loadCharts() {
     } catch (e) { console.error('by_submitter', e); }
 }
 
-// --- Agenci wg działów -----------------------------------------------------
+// --- Pracownicy wg działów ---------------------------------------------------
 
 async function loadDepartments() {
     const container = $('#dept-container');
@@ -845,7 +860,7 @@ async function loadRatings() {
     const note = $('#rating-note');
     let res;
     try {
-        res = (await api('ratings', currentFilters())).data;
+        res = (await api('ratings', Object.assign({ priority_ids: selectedPriorityIds() }, currentFilters()))).data;
     } catch (e) {
         if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
         console.error('ratings', e);
@@ -904,7 +919,8 @@ async function loadRatingDetail(rating) {
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     tbody.innerHTML = '<tr><td colspan="8" class="muted">Ładowanie…</td></tr>';
     try {
-        const { data } = await api('ratings_detail', Object.assign({ rating }, currentFilters()));
+        const { data } = await api('ratings_detail',
+            Object.assign({ rating, priority_ids: selectedPriorityIds() }, currentFilters()));
         if (!data.length) {
             tbody.innerHTML = '<tr><td colspan="8" class="muted">Brak ticketów z tą oceną w wybranym okresie.</td></tr>';
             return;
@@ -926,6 +942,54 @@ async function loadRatingDetail(rating) {
     }
 }
 
+// Średnia ocena w rozbiciu na pracowników / zespoły / działy (bez kolumn
+// per priorytet — to inny przekrój niż mapa cieplna w zakładce Pracownicy).
+const RB_DIM_LABELS = { staff: 'Pracownik', team: 'Zespół', dept: 'Dział' };
+
+async function loadRatingsBreakdown() {
+    const thead = $('#rb-table thead');
+    const tbody = $('#rb-table tbody');
+    const note  = $('#rb-note');
+    if (!thead || !tbody) return;
+
+    thead.innerHTML = `<tr><th>${esc(RB_DIM_LABELS[CURRENT_RB_DIM] || 'Pracownik')}</th>
+        <th>Śr. ocena</th><th>Ocenionych</th><th>% ocenionych</th><th>Zamkniętych</th></tr>`;
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">Ładowanie…</td></tr>';
+
+    try {
+        const resp = await api('ratings_breakdown',
+            Object.assign({ dimension: CURRENT_RB_DIM, priority_ids: selectedPriorityIds() }, currentFilters()));
+        if (resp.available === false) {
+            tbody.innerHTML = '<tr><td colspan="5" class="muted">Nie wykryto pola z oceną.</td></tr>';
+            note.textContent = '';
+            return;
+        }
+        const rows = resp.data || [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="muted">Brak danych dla wybranych filtrów.</td></tr>';
+            note.textContent = '';
+            return;
+        }
+        note.textContent = 'Sortowane od najniższej średniej oceny.';
+        tbody.innerHTML = rows.map((r) => {
+            const total = Number(r.total_closed || 0);
+            const rated = Number(r.rated || 0);
+            const pct = total ? Math.round((rated / total) * 100) + '%' : '—';
+            const avg = r.avg_rating != null ? Number(r.avg_rating).toLocaleString('pl-PL', { maximumFractionDigits: 2 }) + ' ★' : '—';
+            return `<tr>
+                <td>${esc(r.entity_name || '(brak)')}</td>
+                <td>${avg}</td>
+                <td>${rated.toLocaleString('pl-PL')}</td>
+                <td>${pct}</td>
+                <td>${total.toLocaleString('pl-PL')}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
+        tbody.innerHTML = `<tr><td colspan="5" class="error">Błąd: ${esc(e.message)}</td></tr>`;
+    }
+}
+
 // --- Kontrola jakości: szybka odpowiedź, późne zamknięcie -------------------
 // Odsiewa tickety typu „podsyłam i zamykam" -> klient wraca po tygodniach.
 // Nie wymaga żadnej specjalnej tabeli — liczy się z czasu do 1. odpowiedzi
@@ -943,7 +1007,8 @@ async function loadQualityControl() {
     tbody.innerHTML = '<tr><td colspan="10" class="muted">Ładowanie…</td></tr>';
 
     try {
-        const resp = await api('quick_close_gap', Object.assign({ fast_minutes: minutes }, currentFilters()));
+        const resp = await api('quick_close_gap',
+            Object.assign({ fast_minutes: minutes, priority_ids: selectedPriorityIds() }, currentFilters()));
         const rows = resp.data || [];
         const reopenAvailable = !!resp.reopen_available;
 
@@ -985,25 +1050,34 @@ async function loadQualityControl() {
 // --- Priorytety ------------------------------------------------------------
 
 async function initPriorities() {
-    const sel = $('#f-priority');
+    const el = $('#f-priority-msel');
     try {
         const { data } = await api('priorities');
         PRIORITIES = data || [];
-        if (!data.length) { sel.innerHTML = '<option value="">(brak priorytetów)</option>'; return; }
-        sel.innerHTML = data.map((p) =>
-            `<option value="${esc(p.priority_id)}">${esc(p.priority_desc)} (${esc(p.priority)})</option>`
-        ).join('');
-        const high = data.find((p) => String(p.priority).toLowerCase() === 'high');
-        if (high) sel.value = String(high.priority_id);
+        if (el) {
+            F_PRIORITY_MSEL = createMultiSelect(el, PRIORITIES, {
+                getId: (p) => p.priority_id, getLabel: (p) => p.priority_desc,
+                selected: PRIORITIES.map((p) => String(p.priority_id)), // domyślnie wszystkie
+                onChange: onGlobalPriorityChange,
+            });
+        }
     } catch (e) {
-        sel.innerHTML = `<option value="">Błąd: ${esc(e.message)}</option>`;
+        if (el) el.innerHTML = `<p class="error">Błąd: ${esc(e.message)}</p>`;
     }
+}
+
+// Odświeża sekcje, które faktycznie filtrują po globalnym wyborze priorytetów.
+function onGlobalPriorityChange() {
+    loadMain();
+    loadRatings();
+    loadRatingsBreakdown();
+    loadQualityControl();
 }
 
 async function applyAll() {
     await Promise.all([
         loadOverview(), loadMain(), loadCharts(), loadClosedAnalytics(),
-        loadDepartments(), loadBreakdown(), loadRatings(), loadPriorityRanking(),
+        loadDepartments(), loadBreakdown(), loadRatings(), loadRatingsBreakdown(), loadPriorityRanking(),
         loadQualityControl(),
     ]);
 }
@@ -1124,6 +1198,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#bd-active').addEventListener('change', () => {
         $('#bd-active-label').textContent = $('#bd-active').checked ? 'tylko włączone' : 'wszystkie';
         loadBreakdown();
+    });
+
+    // Sekcja „Średnia ocena wg wymiaru" (zakładka Oceny)
+    $('#rb-dim-tabs').addEventListener('click', (ev) => {
+        const btn = ev.target.closest('.dim-tab');
+        if (!btn) return;
+        document.querySelectorAll('#rb-dim-tabs .dim-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        CURRENT_RB_DIM = btn.dataset.dim;
+        loadRatingsBreakdown();
     });
 
     // Ranking priorytetowy (zakładka Priorytety)

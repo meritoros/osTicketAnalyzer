@@ -214,9 +214,12 @@ function schema_reopen_event_source(): ?array
         return null;
     }
 
-    $threadCol = db_column_exists($table, 'thread_id') ? 'thread_id' : null;
-    $timeCol   = null;
-    foreach (['timestamp', 'created', 'time'] as $c) {
+    $threadCol = null;
+    foreach (['thread_id', 'object_id', 'ticket_id'] as $c) {
+        if (db_column_exists($table, $c)) { $threadCol = $c; break; }
+    }
+    $timeCol = null;
+    foreach (['timestamp', 'created', 'time', 'date', 'created_at', 'event_time'] as $c) {
         if (db_column_exists($table, $c)) { $timeCol = $c; break; }
     }
     if ($threadCol === null || $timeCol === null) {
@@ -245,6 +248,25 @@ function schema_reopen_event_source(): ?array
         // brak dostępu do information_schema albo nietypowy typ kolumny — pomijamy bonus
     }
     return null;
+}
+
+/**
+ * Pełny zrzut kolumn tabeli ost_thread_event (do diagnostyki) — pozwala
+ * ręcznie zweryfikować, dlaczego automatyczne wykrycie "reopen" się nie udało,
+ * bez potrzeby dostępu do bazy z zewnątrz. Pusta lista = tabeli nie ma.
+ */
+function schema_thread_event_columns(): array
+{
+    $table = tbl('thread_event');
+    if (!db_table_exists($table)) {
+        return [];
+    }
+    return db_rows(
+        'SELECT column_name, data_type FROM information_schema.columns
+         WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position',
+        'ss',
+        [db_name(), $table]
+    );
 }
 
 /**

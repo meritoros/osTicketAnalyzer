@@ -76,12 +76,18 @@ samym serwerze** co osTicket — i tam też wgrywamy ten projekt.
 - **Raport główny (dla kierownika):** zamknięte zgłoszenia o wybranym priorytecie
   (domyślnie *High*) z datą i godziną zgłoszenia, datą i godziną **pierwszej odpowiedzi**
   oraz policzonym **czasem do pierwszej odpowiedzi**. Eksport do CSV (otwiera się w Excelu).
-- Wolumen zgłoszeń w czasie (wszystkie / zamknięte)
+- **Wolumen zgłoszeń — utworzone vs zamknięte**: dwa osobne grupowania po dniu
+  (utworzone wg `t.created`, zamknięte wg `t.closed`, każde po swojej dacie), więc
+  ticket zgłoszony jednego dnia, a zamknięty tygodnie później, nie zaburza wykresu.
 - Rozkład zgłoszeń wg priorytetu
-- Kto obsługuje najwięcej ticketów (agenci)
-- Kto zgłasza najwięcej ticketów
-- **Agenci wg działów** — rozbicie na działy z oznaczeniem, czy konto agenta jest
-  **aktywne czy nieaktywne** (`ost_staff.isactive`)
+- Kto obsługuje najwięcej ticketów (pracownicy) — top 12, wysokość wykresu skaluje
+  się z liczbą pozycji, żeby żadna etykieta się nie chowała
+- Kto zgłasza najwięcej ticketów — top 12, jak wyżej
+- **Pracownicy wg działów** — rozbicie na działy z oznaczeniem, czy konto pracownika
+  jest **aktywne czy nieaktywne** (`ost_staff.isactive`)
+- **Globalny filtr priorytetów** (pasek filtrów u góry): rozwijana lista z
+  checkboxami, domyślnie wszystkie priorytety zaznaczone. Filtruje raport główny,
+  oceny (w tym rozbicie wg wymiaru) i kontrolę jakości.
 - **Analityka zamkniętych ticketów** — kafelki KPI (liczba zamkniętych, średni czas
   rozwiązania, średni czas 1. odpowiedzi), rozkład wg priorytetu, średni czas
   rozwiązania wg priorytetu, zamknięte w czasie oraz zamknięte wg działu. Ta sekcja
@@ -101,6 +107,10 @@ samym serwerze** co osTicket — i tam też wgrywamy ten projekt.
   szybciej, czerwony = wolniej) — dzięki porównaniu w obrębie kolumny, a nie
   globalnie, priorytety o naturalnie różnej skali czasu (np. Low vs Emergency)
   nie zniekształcają obrazu.
+- **Średnia ocena wg wymiaru** (zakładka *Oceny*): to samo rozbicie
+  pracownik/zespół/dział, ale dla ocen (gwiazdek) zamiast czasów — pokazuje średnią
+  ocenę, liczbę i procent ocenionych ticketów oraz liczbę zamkniętych, posortowane
+  od najniższej średniej.
 
 Wszystko z filtrem zakresu dat. Kolory trzymają się jednego systemu wokół brandowej
 zieleni `#44BE78`; priorytety kolorowane wg wagi (niski→zielony … krytyczny→czerwony).

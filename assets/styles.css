@@ -336,7 +336,7 @@ tr[data-staff] { cursor: pointer; }
 .dot.on { background: var(--good); }
 .dot.off { background: #cbd2dc; }
 
-/* ===== Agenci wg działów ===== */
+/* ===== Pracownicy wg działów ===== */
 .dept { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
 .dept-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 15px; background: var(--panel-2); flex-wrap: wrap; }
 .dept-head .dept-name { font-weight: 700; }

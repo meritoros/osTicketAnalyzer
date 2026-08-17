@@ -81,11 +81,8 @@ try {
             break;
 
         case 'high_priority_closed':
-            $priorityId = (int) $in('priority_id', 0);
-            if ($priorityId <= 0) {
-                json_response(['error' => 'Podaj priority_id (patrz report=priorities).'], 400);
-            }
-            json_response(['data' => report_high_priority_closed($priorityId, $from, $to)]);
+            $priorityIds = $inIntArray('priority_ids');
+            json_response(['data' => report_high_priority_closed($priorityIds, $from, $to)]);
             break;
 
         case 'volume':
@@ -93,11 +90,13 @@ try {
             break;
 
         case 'by_agent':
-            json_response(['data' => report_by_agent($from, $to)]);
+            $limit = (int) $in('limit', 50);
+            json_response(['data' => report_by_agent($from, $to, max(1, min($limit, 500)))]);
             break;
 
         case 'by_submitter':
-            json_response(['data' => report_by_submitter($from, $to)]);
+            $limit = (int) $in('limit', 50);
+            json_response(['data' => report_by_submitter($from, $to, max(1, min($limit, 500)))]);
             break;
 
         case 'by_priority':
@@ -149,7 +148,7 @@ try {
             break;
 
         case 'ratings':
-            json_response(['data' => report_ratings($from, $to)]);
+            json_response(['data' => report_ratings($from, $to, $inIntArray('priority_ids'))]);
             break;
 
         case 'ratings_detail':
@@ -157,14 +156,22 @@ try {
             if ($rating < 1 || $rating > 5) {
                 json_response(['error' => 'Ocena musi być w zakresie 1–5.'], 400);
             }
-            json_response(['data' => report_ratings_detail($rating, $from, $to)]);
+            json_response(['data' => report_ratings_detail($rating, $from, $to, $inIntArray('priority_ids'))]);
+            break;
+
+        case 'ratings_breakdown':
+            $dimension = (string) $in('dimension', 'staff');
+            if (!in_array($dimension, ['staff', 'team', 'dept'], true)) {
+                $dimension = 'staff';
+            }
+            json_response(report_ratings_breakdown($dimension, $from, $to, $inIntArray('priority_ids')));
             break;
 
         case 'quick_close_gap':
             $fastMinutes = (int) $in('fast_minutes', 15);
             if ($fastMinutes < 1) { $fastMinutes = 1; }
             if ($fastMinutes > 1440) { $fastMinutes = 1440; } // max 24h jako „szybka" odpowiedź
-            json_response(report_quick_close_gap($fastMinutes, $from, $to));
+            json_response(report_quick_close_gap($fastMinutes, $from, $to, $inIntArray('priority_ids')));
             break;
 
         default:

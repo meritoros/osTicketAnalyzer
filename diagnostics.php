@@ -58,6 +58,7 @@ $prioritySrc = null;
 $ratingField = null;
 $formFields  = [];
 $reopenSrc   = null;
+$threadEventCols = [];
 
 if ($fatal === null) {
     try {
@@ -69,6 +70,7 @@ if ($fatal === null) {
         $ratingField = schema_rating_field();
         $formFields  = schema_form_fields();
         $reopenSrc   = schema_reopen_event_source();
+        $threadEventCols = schema_thread_event_columns();
         if (empty($tables[tbl('ticket')])) {
             $guessed = schema_guess_prefix();
         }
@@ -224,6 +226,30 @@ if ($fatal === null) {
                     z wpisami pasującymi do „reopen"). Sekcja „Kontrola jakości" i tak działa — odsiewa tickety po
                     odstępie między pierwszą odpowiedzią a zamknięciem, tylko bez potwierdzenia z historii statusów.
                 </div>
+                <?php if ($threadEventCols): ?>
+                    <p class="muted">
+                        Tabela <code><?= h(tbl('thread_event')) ?></code> istnieje — poniżej jej kolumny. Jeśli widzisz
+                        tu kolumnę, która przechowuje typ zdarzenia (np. status/state/event), daj znać jej nazwę i
+                        przykładową wartość dla „ponowne otwarcie" — dopniemy wykrywanie pod Waszą wersję osTicketa.
+                    </p>
+                    <table class="grid">
+                        <thead><tr><th>kolumna</th><th>typ</th></tr></thead>
+                        <tbody>
+                        <?php foreach ($threadEventCols as $c): ?>
+                            <tr>
+                                <td><code><?= h($c['column_name'] ?? ($c['COLUMN_NAME'] ?? '')) ?></code></td>
+                                <td><?= h($c['data_type'] ?? ($c['DATA_TYPE'] ?? '')) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php else: ?>
+                    <p class="muted">
+                        Tabela <code><?= h(tbl('thread_event')) ?></code> w ogóle nie istnieje w tej instalacji —
+                        to normalne w starszych wersjach osTicketa. Historia ponownych otwarć po prostu nie jest
+                        dostępna, „Kontrola jakości" działa wyłącznie na odstępie czasowym.
+                    </p>
+                <?php endif; ?>
             <?php endif; ?>
         </section>
 
