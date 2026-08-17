@@ -3,6 +3,14 @@ require __DIR__ . '/lib/bootstrap.php';
 auth_require_page();
 
 $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), ENT_QUOTES);
+
+// Wersja pliku (mtime) w URL-u — wymusza pobranie świeżej wersji CSS/JS po
+// każdym wdrożeniu, zamiast serwować starą wersję z cache przeglądarki.
+$assetVer = static function (string $rel): string {
+    $path = __DIR__ . '/' . $rel;
+    $v = @filemtime($path);
+    return $rel . '?v=' . ($v !== false ? $v : '1');
+};
 ?>
 <!doctype html>
 <html lang="pl">
@@ -10,7 +18,7 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= $title ?></title>
-    <link rel="stylesheet" href="assets/styles.css">
+    <link rel="stylesheet" href="<?= htmlspecialchars($assetVer('assets/styles.css'), ENT_QUOTES) ?>">
 </head>
 <body>
 <div class="bg-anim" aria-hidden="true">
@@ -388,6 +396,6 @@ $title = htmlspecialchars((string) cfg('app.title', 'osTicket — Statystyki'), 
     };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="assets/app.js"></script>
+<script src="<?= htmlspecialchars($assetVer('assets/app.js'), ENT_QUOTES) ?>"></script>
 </body>
 </html>
