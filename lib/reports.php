@@ -407,6 +407,80 @@ function report_closed_analytics(?string $from, ?string $to): array
     ];
 }
 
+/**
+ * Kohorta wg daty UTWORZENIA ticketa (nie zamknięcia!) z rozbiciem na
+ * BIEŻĄCY status — dokładnie tak, jak liczy natywny raport „Statystyki"
+ * w panelu admina osTicketa (tam zakres dat filtruje datę zgłoszenia, a
+ * kolumny Otwarte/Przypisane/Przedawnione/Zamknięte/Usunięte to bieżący
+ * stan ticketów z tej kohorty — NIE zdarzenia z tego okresu). To inny
+ * przekrój niż reszta tego panelu (który filtruje po dacie ZAMKNIĘCIA),
+ * dlatego liczby się różnią — to raport do porównania 1:1 z osTicketem,
+ * a nie zamiennik pozostałych raportów.
+ *
+ * „Ponownie otwarte" i „Usunięte" wymagają danych, których nie da się
+ * niezawodnie wyliczyć z samej tabeli ost_ticket (usunięty ticket zwykle
+ * znika z tabeli całkowicie, a licznik ponownych otwarć bywa liczony przez
+ * wtyczki raportowe z osobnego źródła) — zwracamy je tylko, gdy uda się
+ * je wykryć w schemacie; w przeciwnym razie front pokazuje „niedostępne".
+ */
+function report_created_cohort(?string $from, ?string $to, array $deptIds = []): array
+{
+    $T = tbl('ticket');
+    $S = tbl('ticket_status');
+    $D = tbl('department');
+
+    $hasOverdue = db_column_exists($T, 'isoverdue');
+
+    $deletedStatusId = null;
+    foreach (schema_statuses() as $st) {
+        $hay = mb_strtolower(((string) ($st['state'] ?? '')) . ' ' . ((string) ($st['name'] ?? '')));
+        if (preg_match('/delet|usuni|archiv/u', $hay)) {
+            $deletedStatusId = (int) $st['id'];
+            break;
+        }
+    }
+
+    $types = '';
+    $params = [];
+
+    $overdueExpr = $hasOverdue ? 'SUM(CASE WHEN t.isoverdue = 1 THEN 1 ELSE 0 END)' : 'NULL';
+    $deletedExpr = $deletedStatusId !== null
+        ? 'SUM(CASE WHEN t.status_id = ' . $deletedStatusId . ' THEN 1 ELSE 0 END)'
+        : 'NULL';
+
+    $sql = "SELECT
+                d.id AS dept_id,
+                COALESCE(d.name, '(bez działu)') AS department,
+                COUNT(*) AS created_total,
+                SUM(CASE WHEN s.state = 'open' THEN 1 ELSE 0 END) AS currently_open,
+                SUM(CASE WHEN s.state = 'open' AND t.staff_id > 0 THEN 1 ELSE 0 END) AS currently_assigned,
+                $overdueExpr AS currently_overdue,
+                SUM(CASE WHEN s.state = 'closed' THEN 1 ELSE 0 END) AS currently_closed,
+                $deletedExpr AS currently_deleted,
+                AVG(CASE WHEN s.state = 'closed'
+                         THEN TIMESTAMPDIFF(SECOND, t.created, t.closed) END) AS avg_resolution_seconds,
+                AVG(CASE WHEN fr.first_response_at IS NOT NULL
+                         THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds
+            FROM $T t
+            LEFT JOIN $D d ON d.id = t.dept_id
+            JOIN $S s ON s.id = t.status_id "
+         . reports_first_response_join()
+         . ' WHERE 1=1 ';
+    $sql .= reports_range('t.created', $from, $to, $types, $params);
+    if (!empty($deptIds)) {
+        $place = implode(',', array_fill(0, count($deptIds), '?'));
+        $sql .= " AND t.dept_id IN ($place) ";
+        foreach ($deptIds as $id) { $types .= 'i'; $params[] = (int) $id; }
+    }
+    $sql .= ' GROUP BY d.id ORDER BY created_total DESC';
+
+    return [
+        'rows'        => db_rows($sql, $types, $params),
+        'has_overdue' => $hasOverdue,
+        'has_deleted' => $deletedStatusId !== null,
+    ];
+}
+
 // ---------------------------------------------------------------------------
 // Przekrój wg wymiaru (pracownicy / użytkownicy / zespoły / oddziały)
 // z kolumnami wg priorytetu. Dotyczy ticketów ZAMKNIĘTYCH w zakresie dat.

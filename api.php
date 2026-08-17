@@ -115,6 +115,10 @@ try {
             json_response(['data' => report_closed_analytics($from, $to)]);
             break;
 
+        case 'created_cohort':
+            json_response(report_created_cohort($from, $to, $inIntArray('dept_ids')));
+            break;
+
         case 'departments':
             json_response(['data' => schema_departments()]);
             break;

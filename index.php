@@ -132,6 +132,34 @@ $assetVer = static function (string $rel): string {
                     <div class="chart-box lg"><canvas id="chart-volume"></canvas></div>
                 </section>
                 <section class="card"><h2>Rozkład wg priorytetu</h2><div class="chart-box"><canvas id="chart-priority"></canvas></div></section>
+
+                <section class="card">
+                    <h2>Porównanie z natywnym raportem osTicketa „Statystyki"</h2>
+                    <p class="section-hint">
+                        Ten panel filtruje wszystkie pozostałe raporty po dacie <strong>zamknięcia</strong> ticketa.
+                        Natywny raport „Statystyki" w osTickecie filtruje po dacie <strong>zgłoszenia</strong> i pokazuje
+                        bieżący status ticketów z tego okresu (Otwarte/Przypisane/Przedawnione/Zamknięte/Usunięte) —
+                        to inna miara, więc liczby nie muszą się zgadzać. Poniżej ta sama, druga miara — do
+                        porównania 1:1 z tym, co widzisz w osTickecie.
+                    </p>
+                    <div class="field" style="max-width:320px">
+                        <label>Działy</label>
+                        <div class="msel" id="cc-dept-msel"></div>
+                    </div>
+                    <p class="section-hint" id="cc-note"></p>
+                    <div class="table-scroll">
+                        <table class="grid" id="cc-table">
+                            <thead>
+                                <tr>
+                                    <th>Dział</th><th>Utworzonych</th><th>Otwarte</th><th>Przypisane</th>
+                                    <th>Przedawnione</th><th>Zamknięte</th><th>Usunięte</th>
+                                    <th>Śr. czas rozwiązania</th><th>Śr. czas 1. odpowiedzi</th>
+                                </tr>
+                            </thead>
+                            <tbody><tr><td colspan="9" class="muted">Ładowanie…</td></tr></tbody>
+                        </table>
+                    </div>
+                </section>
             </div>
 
             <!-- ============ ZAKŁADKA: PRIORYTETY ============ -->

@@ -544,6 +544,49 @@ async function loadClosedAnalytics() {
         : '<tr><td colspan="3" class="muted">Brak danych.</td></tr>';
 }
 
+// Kohorta wg daty ZGŁOSZENIA z bieżącym statusem — do porównania 1:1 z
+// natywnym raportem „Statystyki" w osTickecie (ten filtruje po dacie
+// zgłoszenia, nie zamknięcia, stąd inne liczby niż reszta tego panelu).
+async function loadCreatedCohort() {
+    const tbody = $('#cc-table tbody');
+    const note  = $('#cc-note');
+    const num = (v) => (v != null ? Number(v).toLocaleString('pl-PL') : '0');
+    const cell = (v) => (v === null || v === undefined ? '<span class="muted">niedostępne</span>' : num(v));
+
+    const deptIds = CC_DEPT_MSEL ? CC_DEPT_MSEL.getSelected() : [];
+    tbody.innerHTML = '<tr><td colspan="9" class="muted">Ładowanie…</td></tr>';
+
+    try {
+        const resp = await api('created_cohort', Object.assign({ dept_ids: deptIds }, currentFilters()));
+        const rows = resp.rows || [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="9" class="muted">Brak danych dla wybranych filtrów.</td></tr>';
+            note.textContent = '';
+            return;
+        }
+        const notes = [];
+        if (!resp.has_overdue) notes.push('„Przedawnione" niedostępne — nie wykryto kolumny isoverdue.');
+        if (!resp.has_deleted) notes.push('„Usunięte" niedostępne — nie wykryto statusu usuniętych ticketów (a jeśli osTicket kasuje wiersz z bazy, ta liczba jest nie do odzyskania).');
+        notes.push('„Ponownie otwarte" nie jest tu pokazywane — sprawdź zakładkę Kontrola / Diagnostykę.');
+        note.textContent = notes.join(' ');
+
+        tbody.innerHTML = rows.map((r) => `<tr>
+                <td>${esc(r.department)}</td>
+                <td>${num(r.created_total)}</td>
+                <td>${num(r.currently_open)}</td>
+                <td>${num(r.currently_assigned)}</td>
+                <td>${cell(r.currently_overdue)}</td>
+                <td>${num(r.currently_closed)}</td>
+                <td>${cell(r.currently_deleted)}</td>
+                <td>${esc(fmtDuration(r.avg_resolution_seconds != null ? Math.round(r.avg_resolution_seconds) : null))}</td>
+                <td>${esc(fmtDuration(r.avg_first_response_seconds != null ? Math.round(r.avg_first_response_seconds) : null))}</td>
+            </tr>`).join('');
+    } catch (e) {
+        if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
+        tbody.innerHTML = `<tr><td colspan="9" class="error">Błąd: ${esc(e.message)}</td></tr>`;
+    }
+}
+
 // --- Wyniki wg wymiaru (pivot) ---------------------------------------------
 
 // Kompaktowy czas do gęstej tabeli: „12,5 h" / „45 min" / „30 s".
@@ -559,10 +602,12 @@ function fmtHours(seconds) {
 let DEPARTMENTS = [];
 let DEPT_MSEL = null;      // wybór działów w „Wyniki wg wymiaru"
 let PR_DEPT_MSEL = null;   // wybór działów w „Ranking priorytetowy"
+let CC_DEPT_MSEL = null;   // wybór działów w porównaniu z natywnym raportem osTicketa
 
 async function loadDepartmentsFilter() {
     const bdEl = $('#bd-dept-msel');
     const prEl = $('#pr-dept-msel');
+    const ccEl = $('#cc-dept-msel');
     try {
         const { data } = await api('departments');
         DEPARTMENTS = data || [];
@@ -582,6 +627,13 @@ async function loadDepartmentsFilter() {
                 getId: (d) => d.id, getLabel: (d) => d.name,
                 selected: DEPARTMENTS.map((d) => String(d.id)), // ranking: domyślnie wszystkie działy
                 onChange: () => loadPriorityRanking(),
+            });
+        }
+        if (ccEl) {
+            CC_DEPT_MSEL = createMultiSelect(ccEl, DEPARTMENTS, {
+                getId: (d) => d.id, getLabel: (d) => d.name,
+                selected: DEPARTMENTS.map((d) => String(d.id)),
+                onChange: () => loadCreatedCohort(),
             });
         }
     } catch (e) {
@@ -1076,7 +1128,7 @@ function onGlobalPriorityChange() {
 
 async function applyAll() {
     await Promise.all([
-        loadOverview(), loadMain(), loadCharts(), loadClosedAnalytics(),
+        loadOverview(), loadMain(), loadCharts(), loadClosedAnalytics(), loadCreatedCohort(),
         loadDepartments(), loadBreakdown(), loadRatings(), loadRatingsBreakdown(), loadPriorityRanking(),
         loadQualityControl(),
     ]);
