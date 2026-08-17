@@ -221,7 +221,10 @@ $assetVer = static function (string $rel): string {
 
                 <section class="card">
                     <h2>Analityka zamkniętych ticketów</h2>
-                    <p class="section-hint">Liczone dla ticketów <strong>zamkniętych</strong> w wybranym zakresie dat.</p>
+                    <p class="section-hint">Liczone dla ticketów, które <strong>miały zamknięcie</strong> w wybranym
+                        zakresie dat — nawet jeśli klient później sprawę odświeżył i ticket wrócił do statusu otwarty
+                        (patrz zakładka <em>Kontrola</em>). Dzięki temu liczby dla przeszłych okresów się nie zmieniają
+                        z dnia na dzień i są bliższe natywnemu raportowi „Aktywność zgłoszeń" w osTickecie.</p>
                     <div class="kpi-row">
                         <div class="kpi accent"><div class="kpi-label">Zamkniętych</div><div class="kpi-value" id="kpi-closed">—</div></div>
                         <div class="kpi"><div class="kpi-label">Śr. czas rozwiązania</div><div class="kpi-value" id="kpi-resolution">—</div></div>
@@ -260,6 +263,12 @@ $assetVer = static function (string $rel): string {
                         <span class="heat-legend-inline"><i class="heat-chip" style="background:#ffe9b3"></i>przeciętnie</span>
                         <span class="heat-legend-inline"><i class="heat-chip" style="background:#fbd2d2"></i>wolniej</span>
                         — więc od razu widać, kto najbardziej odstaje przy danym priorytecie.
+                    </p>
+                    <p class="section-hint">
+                        Dane liczone są od faktycznej daty zamknięcia ticketa — jeśli ticket wrócił później do statusu
+                        otwarty (klient odświeżył sprawę), nadal liczy się jako zamknięty w tym okresie. Dzięki temu
+                        wynik dla tego samego zakresu dat jest <strong>stały w czasie</strong> — te same ustawienia
+                        dadzą ten sam wynik dziś i za tydzień, niezależnie od tego, co dzieje się z ticketami później.
                     </p>
                     <div class="dim-tabs" id="dim-tabs">
                         <button type="button" class="dim-tab active" data-dim="staff">Pracownicy</button>

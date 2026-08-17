@@ -123,7 +123,7 @@ function report_high_priority_closed(array $priorityIds, ?string $from, ?string 
                   WHERE te.type = 'R' AND te.staff_id > 0
                   GROUP BY te.thread_id
               ) fr ON fr.thread_id = th.id
-              WHERE s.state = 'closed' ";
+              WHERE t.closed IS NOT NULL ";
 
     $types  = '';
     $params = [];
@@ -148,7 +148,6 @@ function report_high_priority_closed(array $priorityIds, ?string $from, ?string 
 function report_volume(?string $from, ?string $to): array
 {
     $T = tbl('ticket');
-    $S = tbl('ticket_status');
 
     $typesC = ''; $paramsC = [];
     $createdSql = "SELECT DATE(t.created) AS day, COUNT(*) AS created, 0 AS closed
@@ -157,9 +156,12 @@ function report_volume(?string $from, ?string $to): array
                  . ' GROUP BY DATE(t.created)';
 
     $typesX = ''; $paramsX = [];
+    // Licz po fakcie zamknięcia (t.closed), NIE po aktualnym statusie — ticket
+    // później ponownie otwarty nadal LICZY SIĘ jako zamknięty tego dnia
+    // (patrz komentarz przy report_closed_summary niżej: to samo założenie
+    // stosujemy we wszystkich raportach „zamkniętych").
     $closedSql = "SELECT DATE(t.closed) AS day, 0 AS created, COUNT(*) AS closed
                   FROM $T t
-                  JOIN $S s ON s.id = t.status_id AND s.state = 'closed'
                   WHERE t.closed IS NOT NULL " . reports_range('t.closed', $from, $to, $typesX, $paramsX)
                  . ' GROUP BY DATE(t.closed)';
 
@@ -263,13 +265,28 @@ function report_staff_by_department(): array
 
 // ---------------------------------------------------------------------------
 // Analityka zamkniętych ticketów (filtr po dacie ZAMKNIĘCIA t.closed)
+//
+// WAŻNE — definicja "zamknięty": liczymy każdy ticket, który MA znacznik
+// t.closed w zakresie dat, NIEZALEŻNIE od tego, w jakim statusie jest TERAZ.
+// Wcześniej te raporty dodatkowo wymagały aktualnego statusu = 'closed', co
+// dawało dwa błędy zgłoszone przez kierownika:
+//   1) liczby niższe niż natywny raport „Aktywność zgłoszeń" w osTickecie —
+//      ticket zamknięty w danym okresie, a POTEM ponownie otwarty przez
+//      klienta (patrz zakładka „Kontrola jakości"), znikał z naszych
+//      raportów, mimo że faktycznie został zamknięty w tym okresie;
+//   2) Mapa cieplna dawała RÓŻNE wyniki dla tego samego zakresu dat w piątek
+//      i w poniedziałek — bo ticket zamknięty w piątek, a otwarty ponownie
+//      w weekend, w poniedziałek już nie spełniał warunku "status=closed"
+//      i wypadał z historycznego, z definicji NIEZMIENNEGO zakresu.
+// Filtrowanie tylko po t.closed daje stabilny, historyczny wynik: to, co
+// było zamknięte w danym okresie, zostaje zamknięte w tym okresie na zawsze,
+// nawet jeśli klient później sprawę odświeżył.
 // ---------------------------------------------------------------------------
 
 /** Podsumowanie: ile zamkniętych, średni czas rozwiązania i 1. odpowiedzi. */
 function report_closed_summary(?string $from, ?string $to): ?array
 {
     $T = tbl('ticket');
-    $S = tbl('ticket_status');
 
     $types = '';
     $params = [];
@@ -279,8 +296,7 @@ function report_closed_summary(?string $from, ?string $to): ?array
                 AVG(CASE WHEN fr.first_response_at IS NOT NULL
                          THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds,
                 SUM(CASE WHEN fr.first_response_at IS NOT NULL THEN 1 ELSE 0 END) AS with_response
-            FROM $T t
-            JOIN $S s ON s.id = t.status_id AND s.state = 'closed' "
+            FROM $T t "
          . reports_first_response_join()
          . " WHERE t.closed IS NOT NULL ";
     $sql .= reports_range('t.closed', $from, $to, $types, $params);
@@ -295,7 +311,6 @@ function report_closed_by_priority(?string $from, ?string $to): array
     $priCol = reports_priority_expr($ps);
 
     $T  = tbl('ticket');
-    $S  = tbl('ticket_status');
     $PR = tbl('ticket_priority');
     $CD = tbl('ticket__cdata');
     $hasCdata = $ps !== null && $ps['joinOnTicket'];
@@ -310,8 +325,7 @@ function report_closed_by_priority(?string $from, ?string $to): array
                 AVG(TIMESTAMPDIFF(SECOND, t.created, t.closed)) AS avg_resolution_seconds,
                 AVG(CASE WHEN fr.first_response_at IS NOT NULL
                          THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds
-            FROM $T t
-            JOIN $S s ON s.id = t.status_id AND s.state = 'closed' ";
+            FROM $T t ";
     if ($hasCdata) {
         $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
     }
@@ -328,7 +342,6 @@ function report_closed_by_priority(?string $from, ?string $to): array
 function report_closed_by_department(?string $from, ?string $to): array
 {
     $T = tbl('ticket');
-    $S = tbl('ticket_status');
     $D = tbl('department');
 
     $types = '';
@@ -339,7 +352,6 @@ function report_closed_by_department(?string $from, ?string $to): array
                 COUNT(*) AS total,
                 AVG(TIMESTAMPDIFF(SECOND, t.created, t.closed)) AS avg_resolution_seconds
             FROM $T t
-            JOIN $S s ON s.id = t.status_id AND s.state = 'closed'
             LEFT JOIN $D d ON d.id = t.dept_id
             WHERE t.closed IS NOT NULL ";
     $sql .= reports_range('t.closed', $from, $to, $types, $params);
@@ -352,13 +364,11 @@ function report_closed_by_department(?string $from, ?string $to): array
 function report_closed_over_time(?string $from, ?string $to): array
 {
     $T = tbl('ticket');
-    $S = tbl('ticket_status');
 
     $types = '';
     $params = [];
     $sql = "SELECT DATE(t.closed) AS day, COUNT(*) AS closed
             FROM $T t
-            JOIN $S s ON s.id = t.status_id AND s.state = 'closed'
             WHERE t.closed IS NOT NULL ";
     $sql .= reports_range('t.closed', $from, $to, $types, $params);
     $sql .= " GROUP BY DATE(t.closed) ORDER BY day ASC";
@@ -439,7 +449,6 @@ function report_breakdown(string $dimension, string $metric, ?string $from, ?str
     $hasCdata = $ps !== null && $ps['joinOnTicket'];
 
     $T  = tbl('ticket');
-    $S  = tbl('ticket_status');
     $PR = tbl('ticket_priority');
     $CD = tbl('ticket__cdata');
 
@@ -485,8 +494,7 @@ function report_breakdown(string $dimension, string $metric, ?string $from, ?str
                 pr.priority_urgency,
                 $valueExpr AS value,
                 COUNT(*)   AS cnt
-            FROM $T t
-            JOIN $S s ON s.id = t.status_id AND s.state = 'closed' ";
+            FROM $T t ";
     if ($hasCdata) {
         $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
     }
@@ -536,7 +544,6 @@ function report_priority_tickets(array $priorityIds, ?string $from, ?string $to,
     $hasCdata = $ps['joinOnTicket'];
 
     $T  = tbl('ticket');
-    $S  = tbl('ticket_status');
     $PR = tbl('ticket_priority');
     $CD = tbl('ticket__cdata');
     $U  = tbl('user');
@@ -558,8 +565,7 @@ function report_priority_tickets(array $priorityIds, ?string $from, ?string $to,
                 CASE WHEN fr.first_response_at IS NOT NULL
                      THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) ELSE NULL END AS first_response_seconds,
                 TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds
-            FROM $T t
-            JOIN $S s ON s.id = t.status_id AND s.state = 'closed' ";
+            FROM $T t ";
     if ($hasCdata) {
         $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
     }
@@ -699,7 +705,6 @@ function report_ratings(?string $from, ?string $to, array $priorityIds = []): ar
     $priCol = reports_priority_expr($ps);
 
     $T  = tbl('ticket');
-    $S  = tbl('ticket_status');
     $CD = tbl('ticket__cdata');
     $ratingExpr = reports_rating_expr($field);
 
@@ -708,7 +713,6 @@ function report_ratings(?string $from, ?string $to, array $priorityIds = []): ar
     $params = [];
     $inner = "SELECT $ratingExpr AS r
               FROM $T t
-              JOIN $S s ON s.id = t.status_id AND s.state = 'closed'
               LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id
               WHERE t.closed IS NOT NULL ";
     $inner .= reports_priority_filter($priCol, $priorityIds, $types, $params);
@@ -753,7 +757,6 @@ function report_ratings_detail(int $rating, ?string $from, ?string $to, array $p
     $hasCdata = $ps !== null && $ps['joinOnTicket'];
 
     $T  = tbl('ticket');
-    $S  = tbl('ticket_status');
     $CD = tbl('ticket__cdata');
     $U  = tbl('user');
     $ST = tbl('staff');
@@ -774,7 +777,6 @@ function report_ratings_detail(int $rating, ?string $from, ?string $to, array $p
                      THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) ELSE NULL END AS first_response_seconds,
                 TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds
             FROM $T t
-            JOIN $S s ON s.id = t.status_id AND s.state = 'closed'
             LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id
             LEFT JOIN $U u   ON u.id = t.user_id
             LEFT JOIN $ST st ON st.staff_id = t.staff_id "
@@ -800,7 +802,6 @@ function report_ratings_breakdown(string $dimension, ?string $from, ?string $to,
     $priCol = reports_priority_expr($ps);
 
     $T  = tbl('ticket');
-    $S  = tbl('ticket_status');
     $CD = tbl('ticket__cdata');
     $ratingExpr = reports_rating_expr($field);
 
@@ -835,7 +836,6 @@ function report_ratings_breakdown(string $dimension, ?string $from, ?string $to,
                 SUM(CASE WHEN ($ratingExpr) BETWEEN 1 AND 5 THEN 1 ELSE 0 END) AS rated,
                 AVG(CASE WHEN ($ratingExpr) BETWEEN 1 AND 5 THEN ($ratingExpr) END) AS avg_rating
             FROM $T t
-            JOIN $S s ON s.id = t.status_id AND s.state = 'closed'
             LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id "
          . $join
          . " WHERE t.closed IS NOT NULL " . $exists;
@@ -865,7 +865,6 @@ function report_quick_close_gap(int $fastResponseMinutes, ?string $from, ?string
     $hasCdata = $ps !== null && $ps['joinOnTicket'];
 
     $T  = tbl('ticket');
-    $S  = tbl('ticket_status');
     $PR = tbl('ticket_priority');
     $CD = tbl('ticket__cdata');
     $U  = tbl('user');
@@ -889,8 +888,7 @@ function report_quick_close_gap(int $fastResponseMinutes, ?string $from, ?string
                 TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) AS first_response_seconds,
                 TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds,
                 TIMESTAMPDIFF(SECOND, fr.first_response_at, t.closed) AS gap_seconds
-            FROM $T t
-            JOIN $S s ON s.id = t.status_id AND s.state = 'closed' ";
+            FROM $T t ";
     if ($hasCdata) {
         $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
     }

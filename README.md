@@ -121,13 +121,31 @@ Pulpit jest podzielony na zakładki: Przegląd / Priorytety / Pracownicy / Oceny
 | Co | Źródło |
 |---|---|
 | Zgłoszenie / zamknięcie | `ost_ticket.created` / `ost_ticket.closed` |
-| Status „zamknięte" | `ost_ticket_status.state = 'closed'` |
+| „Zamknięty w okresie" | `ost_ticket.closed IS NOT NULL` w zakresie dat — **niezależnie od aktualnego statusu** (patrz „Uwagi" niżej) |
 | Priorytet | `ost_ticket__cdata.priority` → `ost_ticket_priority` |
 | Pierwsza odpowiedź | najwcześniejszy wpis agenta (`type='R'`) w `ost_thread_entry` |
 | Zgłaszający / agent | `ost_user` / `ost_staff` |
 
 ## Uwagi
 
+- **Definicja „zamknięty w okresie" — dlaczego liczby są stabilne w czasie.**
+  Wszystkie raporty „zamkniętych" ticketów (analityka, mapa cieplna, oceny, ranking
+  priorytetowy, raport główny) liczą ticket jako zamknięty w danym dniu/okresie na
+  podstawie samego `ost_ticket.closed`, **bez** wymogu, żeby ticket był TERAZ w
+  statusie zamknięty. Wcześniej wymagaliśmy też aktualnego statusu — to dawało dwa
+  realne błędy zgłoszone przez kierownika: (1) liczby niższe niż natywny raport
+  „Aktywność zgłoszeń" w osTickecie, bo ticket zamknięty w danym okresie, a POTEM
+  ponownie otwarty przez klienta, znikał z naszych raportów mimo że faktycznie
+  został zamknięty w tym okresie; (2) mapa cieplna dawała różne wyniki dla tego
+  samego zakresu dat sprawdzanego w różne dni — bo między jednym sprawdzeniem
+  a drugim jakiś ticket mógł zostać ponownie otwarty i wypaść z „zamkniętych".
+  Po zmianie: to, co było zamknięte w danym okresie, zostaje zamknięte w tym
+  okresie na zawsze — wynik dla ustalonego zakresu dat jest identyczny bez względu
+  na to, kiedy go sprawdzasz. **Uwaga:** to podnosi liczby względem poprzedniej
+  wersji (doliczają się tickety później ponownie otwarte) — to oczekiwana zmiana,
+  nie błąd. Dokładne dopasowanie do natywnego raportu osTicketa nie jest
+  gwarantowane (nie znamy jego wewnętrznej definicji „zamknięcia" z zewnątrz), ale
+  powinno być znacznie bliższe niż wcześniej.
 - **Czas pierwszej odpowiedzi** liczony jest jako pierwsza odpowiedź agenta (człowieka)
   w wątku. Automatyczne auto-odpowiedzi są pomijane (`staff_id > 0`). To założenie łatwo
   zmienić w `lib/reports.php`.
