@@ -221,10 +221,16 @@ function fmtDuration(seconds) {
 
 function fmtDateTime(v) { return v ? String(v) : '—'; }
 
-// Podkreślony (wyróżniony) czas trwania — jako pigułka.
-function durBadge(seconds, kind) {
+// Podkreślony (wyróżniony) czas trwania — jako pigułka. isOutlier=true
+// dodaje odznakę „wznowiony po długiej przerwie" (patrz reports_max_resolution_days
+// w lib/reports.php) — czas nadal jest pokazany, tylko oznaczony jako pominięty
+// w uśrednieniach, żeby nie wyglądało to jak ukrywanie danych.
+function durBadge(seconds, kind, isOutlier) {
     if (seconds === null || seconds === undefined) return '<span class="muted">—</span>';
-    return `<span class="dur dur-${kind}">${esc(fmtDuration(seconds))}</span>`;
+    const badge = isOutlier
+        ? ' <span class="dur-outlier-flag" title="Ticket sprzed dawna wznowiony po długiej przerwie — ten czas jest pominięty w uśrednieniach, żeby nie zawyżał statystyk">⏳</span>'
+        : '';
+    return `<span class="dur dur-${kind}">${esc(fmtDuration(seconds))}</span>${badge}`;
 }
 
 function esc(v) {
@@ -272,7 +278,7 @@ async function loadMain() {
                 <td>${esc(fmtDateTime(r.first_response_at))}</td>
                 <td>${durBadge(r.first_response_seconds, 'fr')}</td>
                 <td>${esc(fmtDateTime(r.closed_at))}</td>
-                <td>${durBadge(r.resolution_seconds, 'res')}</td>
+                <td>${durBadge(r.resolution_seconds, 'res', r.resolution_is_outlier)}</td>
             </tr>`).join('');
     } catch (e) {
         if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
@@ -893,7 +899,7 @@ function openAgentDrilldown(staffId, agentName, jumpToNumber) {
                 <td>${esc(fmtDateTime(r.opened_at))}</td>
                 <td>${durBadge(r.first_response_seconds, 'fr')}</td>
                 <td>${esc(fmtDateTime(r.closed_at))}</td>
-                <td>${durBadge(r.resolution_seconds, 'res')}</td>
+                <td>${durBadge(r.resolution_seconds, 'res', r.resolution_is_outlier)}</td>
             </tr>`;
         }).join('');
     }
@@ -986,7 +992,7 @@ async function loadRatingDetail(rating) {
                 <td>${esc(fmtDateTime(r.opened_at))}</td>
                 <td>${durBadge(r.first_response_seconds, 'fr')}</td>
                 <td>${esc(fmtDateTime(r.closed_at))}</td>
-                <td>${durBadge(r.resolution_seconds, 'res')}</td>
+                <td>${durBadge(r.resolution_seconds, 'res', r.resolution_is_outlier)}</td>
             </tr>`).join('');
     } catch (e) {
         if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
@@ -1089,7 +1095,7 @@ async function loadQualityControl() {
                 <td>${esc(fmtDateTime(r.opened_at))}</td>
                 <td>${durBadge(r.first_response_seconds, 'fr')}</td>
                 <td>${esc(fmtDateTime(r.closed_at))}</td>
-                <td><span class="dur dur-gap">${esc(fmtDuration(r.gap_seconds))}</span></td>
+                <td><span class="dur dur-gap">${esc(fmtDuration(r.gap_seconds))}</span>${r.resolution_is_outlier ? ' <span class="dur-outlier-flag" title="Duży odstęp może wynikać z wznowienia dawnego ticketa po latach, nie z opieszałości agenta">⏳ stary ticket?</span>' : ''}</td>
                 <td>${reopenCell}</td>
             </tr>`;
         }).join('');

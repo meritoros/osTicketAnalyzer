@@ -69,4 +69,17 @@ return [
         // (ocena / gwiazdki / rating / star). Sprawdź w diagnostyce, co wykryto.
         'field' => getenv('OSTA_RATING_FIELD') ?: '',
     ],
+
+    // --- Raporty -------------------------------------------------------------
+    'reports' => [
+        // Ticket sprzed lat, do którego klient wraca po długiej przerwie z
+        // zupełnie nową sprawą (np. "proszę o przedłużenie certyfikatu" na
+        // tickecie z 2024 roku) liczy się jako "otwarcie→zamknięcie" trwające
+        // LATA, jeśli po prostu odejmiemy datę zamknięcia od daty UTWORZENIA.
+        // Tickety, których czas rozwiązania przekracza tyle dni, są WYKLUCZANE
+        // z uśrednień czasu rozwiązania (żeby nie zawyżały statystyk o lata),
+        // ale nadal liczą się jako zamknięte — i nadal widać je na surowych
+        // listach, oznaczone jako "wznowiony po długiej przerwie".
+        'max_resolution_days' => (int) (getenv('OSTA_MAX_RESOLUTION_DAYS') ?: 90),
+    ],
 ];

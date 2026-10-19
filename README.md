@@ -146,6 +146,17 @@ Pulpit jest podzielony na zakładki: Przegląd / Priorytety / Pracownicy / Oceny
   nie błąd. Dokładne dopasowanie do natywnego raportu osTicketa nie jest
   gwarantowane (nie znamy jego wewnętrznej definicji „zamknięcia" z zewnątrz), ale
   powinno być znacznie bliższe niż wcześniej.
+- **Tickety „wznowione po długiej przerwie" nie psują uśrednień czasu.** Ticket
+  sprzed lat, do którego klient wraca z nową, niezwiązaną sprawą (klasyczny
+  przykład: „proszę o przedłużenie certyfikatu" na tickecie z 2024 roku) liczyłby
+  się jako „otwarcie→zamknięcie" trwające LATA, gdyby po prostu odjąć datę
+  zamknięcia od daty utworzenia. Każdy ticket, u którego ta różnica przekracza
+  próg z `config.php` → `reports.max_resolution_days` (domyślnie **90 dni**),
+  jest wykluczany z uśrednień/sum czasu rozwiązania (analityka zamkniętych,
+  mapa cieplna, ranking priorytetowy) — ale nadal liczy się jako zamknięty
+  (nie znika z żadnych liczników ticketów). Na surowych listach (raport główny,
+  rozwinięcie agenta, kontrola jakości) taki ticket nadal jest widoczny, tylko
+  oznaczony ikoną ⏳ z podpowiedzią, dlaczego jego czas jest pominięty w średniej.
 - **Czas pierwszej odpowiedzi** liczony jest jako pierwsza odpowiedź agenta (człowieka)
   w wątku. Automatyczne auto-odpowiedzi są pomijane (`staff_id > 0`). To założenie łatwo
   zmienić w `lib/reports.php`.

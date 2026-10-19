@@ -70,6 +70,43 @@ function reports_priority_filter(?string $priCol, array $priorityIds, string &$t
 }
 
 /**
+ * Próg (w dniach) powyżej którego czas "otwarcie→zamknięcie" traktujemy jako
+ * „wznowiony po długiej przerwie" — ticket sprzed lat, do którego klient
+ * wraca z nową, niezwiązaną sprawą (np. "proszę o przedłużenie certyfikatu"
+ * na tickecie z 2024 roku), odejmując TIMESTAMPDIFF(t.created, t.closed)
+ * dałby "czas rozwiązania" liczony w latach, co zawyżałoby uśrednienia.
+ * Taki ticket nadal liczy się jako zamknięty w okresie — wyklucza się
+ * TYLKO z uśrednień czasu, nigdy z liczby zamkniętych. Konfigurowalne przez
+ * config.php -> reports.max_resolution_days (domyślnie 90 dni).
+ */
+function reports_max_resolution_days(): int
+{
+    $v = (int) cfg('reports.max_resolution_days', 90);
+    return $v > 0 ? $v : 90;
+}
+
+/**
+ * Wyrażenie SQL czasu rozwiązania (sekundy) do UŚREDNIEŃ/SUM — zwraca NULL
+ * (pomijane przez AVG/SUM) dla ticketów przekraczających próg „wznowiony po
+ * długiej przerwie". Do surowych list (per-ticket) używaj zwykłego
+ * TIMESTAMPDIFF(SECOND, t.created, t.closed) + reports_resolution_outlier_expr()
+ * jako osobnej flagi — tam chcemy pokazać prawdziwą wartość, tylko oznaczoną.
+ */
+function reports_resolution_seconds_agg_expr(): string
+{
+    $days = reports_max_resolution_days();
+    return "(CASE WHEN TIMESTAMPDIFF(DAY, t.created, t.closed) <= $days
+                   THEN TIMESTAMPDIFF(SECOND, t.created, t.closed) END)";
+}
+
+/** Wyrażenie SQL: 1 gdy ticket przekracza próg „wznowiony po długiej przerwie", inaczej 0. */
+function reports_resolution_outlier_expr(): string
+{
+    $days = reports_max_resolution_days();
+    return "(CASE WHEN TIMESTAMPDIFF(DAY, t.created, t.closed) > $days THEN 1 ELSE 0 END)";
+}
+
+/**
  * RAPORT GŁÓWNY: zamknięte zgłoszenia o wybranym priorytecie
  * wraz z datą/godziną zgłoszenia, pierwszej odpowiedzi i czasem do niej.
  */
@@ -105,7 +142,9 @@ function report_high_priority_closed(array $priorityIds, ?string $from, ?string 
                      ELSE NULL END                 AS first_response_seconds,
                 CASE WHEN t.closed IS NOT NULL
                      THEN TIMESTAMPDIFF(SECOND, t.created, t.closed)
-                     ELSE NULL END                 AS resolution_seconds
+                     ELSE NULL END                 AS resolution_seconds,
+                CASE WHEN t.closed IS NOT NULL THEN " . reports_resolution_outlier_expr() . "
+                     ELSE 0 END                    AS resolution_is_outlier
              FROM $T t
              JOIN $S s ON s.id = t.status_id ";
 
@@ -292,7 +331,7 @@ function report_closed_summary(?string $from, ?string $to): ?array
     $params = [];
     $sql = "SELECT
                 COUNT(*) AS total_closed,
-                AVG(TIMESTAMPDIFF(SECOND, t.created, t.closed)) AS avg_resolution_seconds,
+                AVG(" . reports_resolution_seconds_agg_expr() . ") AS avg_resolution_seconds,
                 AVG(CASE WHEN fr.first_response_at IS NOT NULL
                          THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds,
                 SUM(CASE WHEN fr.first_response_at IS NOT NULL THEN 1 ELSE 0 END) AS with_response
@@ -322,7 +361,7 @@ function report_closed_by_priority(?string $from, ?string $to): array
                 pr.priority_desc AS priority_name,
                 pr.priority_color,
                 COUNT(*) AS total,
-                AVG(TIMESTAMPDIFF(SECOND, t.created, t.closed)) AS avg_resolution_seconds,
+                AVG(" . reports_resolution_seconds_agg_expr() . ") AS avg_resolution_seconds,
                 AVG(CASE WHEN fr.first_response_at IS NOT NULL
                          THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds
             FROM $T t ";
@@ -350,7 +389,7 @@ function report_closed_by_department(?string $from, ?string $to): array
                 d.id AS dept_id,
                 COALESCE(d.name, '(bez działu)') AS department,
                 COUNT(*) AS total,
-                AVG(TIMESTAMPDIFF(SECOND, t.created, t.closed)) AS avg_resolution_seconds
+                AVG(" . reports_resolution_seconds_agg_expr() . ") AS avg_resolution_seconds
             FROM $T t
             LEFT JOIN $D d ON d.id = t.dept_id
             WHERE t.closed IS NOT NULL ";
@@ -458,7 +497,7 @@ function report_created_cohort(?string $from, ?string $to, array $deptIds = []):
                 SUM(CASE WHEN s.state = 'closed' THEN 1 ELSE 0 END) AS currently_closed,
                 $deletedExpr AS currently_deleted,
                 AVG(CASE WHEN s.state = 'closed'
-                         THEN TIMESTAMPDIFF(SECOND, t.created, t.closed) END) AS avg_resolution_seconds,
+                         THEN " . reports_resolution_seconds_agg_expr() . " END) AS avg_resolution_seconds,
                 AVG(CASE WHEN fr.first_response_at IS NOT NULL
                          THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds
             FROM $T t
@@ -491,7 +530,7 @@ function reports_metric_expr(string $metric): string
 {
     switch ($metric) {
         case 'sum_resolution':
-            return 'SUM(TIMESTAMPDIFF(SECOND, t.created, t.closed))';
+            return 'SUM(' . reports_resolution_seconds_agg_expr() . ')';
         case 'avg_first_response':
             return 'AVG(CASE WHEN fr.first_response_at IS NOT NULL
                             THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END)';
@@ -499,7 +538,7 @@ function reports_metric_expr(string $metric): string
             return 'COUNT(*)';
         case 'avg_resolution':
         default:
-            return 'AVG(TIMESTAMPDIFF(SECOND, t.created, t.closed))';
+            return 'AVG(' . reports_resolution_seconds_agg_expr() . ')';
     }
 }
 
@@ -638,7 +677,8 @@ function report_priority_tickets(array $priorityIds, ?string $from, ?string $to,
                 pr.priority_desc AS priority_name,
                 CASE WHEN fr.first_response_at IS NOT NULL
                      THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) ELSE NULL END AS first_response_seconds,
-                TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds
+                TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds,
+                " . reports_resolution_outlier_expr() . " AS resolution_is_outlier
             FROM $T t ";
     if ($hasCdata) {
         $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
@@ -714,7 +754,11 @@ function report_priority_ranking(array $priorityIds, ?string $from, ?string $to,
                 ];
             }
         }
-        if ($r['resolution_seconds'] !== null) {
+        // Tickety "wznowione po długiej przerwie" (patrz reports_max_resolution_days)
+        // liczą się do count() i widać je w pełnej liście (tickets), ale NIE
+        // wliczamy ich do avg/max czasu rozwiązania — inaczej jeden ticket
+        // sprzed lat potrafiłby zawyżyć średnią agenta o miesiące.
+        if ($r['resolution_seconds'] !== null && empty($r['resolution_is_outlier'])) {
             $sec = (int) $r['resolution_seconds'];
             $a['res_sum'] += $sec;
             $a['res_count']++;
@@ -849,7 +893,8 @@ function report_ratings_detail(int $rating, ?string $from, ?string $to, array $p
                 fr.first_response_at,
                 CASE WHEN fr.first_response_at IS NOT NULL
                      THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) ELSE NULL END AS first_response_seconds,
-                TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds
+                TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds,
+                " . reports_resolution_outlier_expr() . " AS resolution_is_outlier
             FROM $T t
             LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id
             LEFT JOIN $U u   ON u.id = t.user_id
@@ -961,7 +1006,8 @@ function report_quick_close_gap(int $fastResponseMinutes, ?string $from, ?string
                 pr.priority_desc AS priority_name,
                 TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) AS first_response_seconds,
                 TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds,
-                TIMESTAMPDIFF(SECOND, fr.first_response_at, t.closed) AS gap_seconds
+                TIMESTAMPDIFF(SECOND, fr.first_response_at, t.closed) AS gap_seconds,
+                " . reports_resolution_outlier_expr() . " AS resolution_is_outlier
             FROM $T t ";
     if ($hasCdata) {
         $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";

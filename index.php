@@ -178,6 +178,9 @@ $assetVer = static function (string $rel): string {
                         Liczy się <strong>obie</strong> miary: czas do pierwszej odpowiedzi ORAZ czas do faktycznego
                         zamknięcia ticketa — żeby nie dało się „odpisać i zniknąć". Kliknij wiersz agenta, aby zobaczyć
                         pełną listę jego ticketów i sprawdzić, czy średnią zawyżył pojedynczy przypadek.
+                        Tickety wznowione po bardzo długiej przerwie (np. stara sprawa z poprzednich lat, do której
+                        klient wraca z nowym, niezwiązanym pytaniem) są oznaczone ikoną ⏳ i <strong>pominięte
+                        w uśrednieniach</strong>, żeby nie zawyżały statystyk o lata — nadal widać je na liście.
                     </p>
                     <div class="bd-controls">
                         <div class="field">
@@ -252,7 +255,10 @@ $assetVer = static function (string $rel): string {
                     <p class="section-hint">Liczone dla ticketów, które <strong>miały zamknięcie</strong> w wybranym
                         zakresie dat — nawet jeśli klient później sprawę odświeżył i ticket wrócił do statusu otwarty
                         (patrz zakładka <em>Kontrola</em>). Dzięki temu liczby dla przeszłych okresów się nie zmieniają
-                        z dnia na dzień i są bliższe natywnemu raportowi „Aktywność zgłoszeń" w osTickecie.</p>
+                        z dnia na dzień i są bliższe natywnemu raportowi „Aktywność zgłoszeń" w osTickecie.
+                        <strong>Śr. czas rozwiązania</strong> pomija tickety wznowione po bardzo długiej przerwie
+                        (stara sprawa z poprzednich lat, nowe pytanie klienta) — inaczej jeden taki ticket potrafiłby
+                        zawyżyć średnią o miesiące.</p>
                     <div class="kpi-row">
                         <div class="kpi accent"><div class="kpi-label">Zamkniętych</div><div class="kpi-value" id="kpi-closed">—</div></div>
                         <div class="kpi"><div class="kpi-label">Śr. czas rozwiązania</div><div class="kpi-value" id="kpi-resolution">—</div></div>
@@ -297,6 +303,10 @@ $assetVer = static function (string $rel): string {
                         otwarty (klient odświeżył sprawę), nadal liczy się jako zamknięty w tym okresie. Dzięki temu
                         wynik dla tego samego zakresu dat jest <strong>stały w czasie</strong> — te same ustawienia
                         dadzą ten sam wynik dziś i za tydzień, niezależnie od tego, co dzieje się z ticketami później.
+                        Tickety wznowione po bardzo długiej przerwie (stara sprawa z poprzednich lat, nowe pytanie
+                        klienta — np. „proszę o przedłużenie certyfikatu") są <strong>pomijane w czasach</strong>
+                        pokazanych tutaj, żeby jeden taki przypadek nie zawyżył komórki o lata; nadal liczą się do
+                        kolumny „Ticketów".
                     </p>
                     <div class="dim-tabs" id="dim-tabs">
                         <button type="button" class="dim-tab active" data-dim="staff">Pracownicy</button>
