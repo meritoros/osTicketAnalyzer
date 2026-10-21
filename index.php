@@ -258,7 +258,8 @@ $assetVer = static function (string $rel): string {
                         z dnia na dzień i są bliższe natywnemu raportowi „Aktywność zgłoszeń" w osTickecie.
                         <strong>Śr. czas rozwiązania</strong> pomija tickety wznowione po bardzo długiej przerwie
                         (stara sprawa z poprzednich lat, nowe pytanie klienta) — inaczej jeden taki ticket potrafiłby
-                        zawyżyć średnią o miesiące.</p>
+                        zawyżyć średnią o miesiące. <strong>Śr. czas 1. odpowiedzi</strong> liczony jest osobno — wg
+                        miesiąca, w którym padła odpowiedź, a nie w którym ticket się zamknął.</p>
                     <div class="kpi-row">
                         <div class="kpi accent"><div class="kpi-label">Zamkniętych</div><div class="kpi-value" id="kpi-closed">—</div></div>
                         <div class="kpi"><div class="kpi-label">Śr. czas rozwiązania</div><div class="kpi-value" id="kpi-resolution">—</div></div>
@@ -268,8 +269,8 @@ $assetVer = static function (string $rel): string {
                 </section>
 
                 <div class="grid-2">
-                    <section class="card"><h2>Śr. czas 1. odpowiedzi wg priorytetu</h2><p class="section-hint">otwarcie → pierwsza odpowiedź agenta</p><div class="chart-box"><canvas id="chart-closed-frtime"></canvas></div></section>
-                    <section class="card"><h2>Śr. czas rozwiązania wg priorytetu</h2><p class="section-hint">otwarcie → zamknięcie</p><div class="chart-box"><canvas id="chart-closed-restime"></canvas></div></section>
+                    <section class="card"><h2>Śr. czas 1. odpowiedzi wg priorytetu</h2><p class="section-hint">otwarcie → pierwsza odpowiedź agenta · liczone wg daty odpowiedzi</p><div class="chart-box"><canvas id="chart-closed-frtime"></canvas></div></section>
+                    <section class="card"><h2>Śr. czas rozwiązania wg priorytetu</h2><p class="section-hint">otwarcie → zamknięcie · liczone wg daty zamknięcia</p><div class="chart-box"><canvas id="chart-closed-restime"></canvas></div></section>
                 </div>
                 <div class="grid-2">
                     <section class="card"><h2>Zamknięte wg priorytetu</h2><div class="chart-box"><canvas id="chart-closed-priority"></canvas></div></section>

@@ -77,12 +77,14 @@ function reports_priority_filter(?string $priCol, array $priorityIds, string &$t
  * dałby "czas rozwiązania" liczony w latach, co zawyżałoby uśrednienia.
  * Taki ticket nadal liczy się jako zamknięty w okresie — wyklucza się
  * TYLKO z uśrednień czasu, nigdy z liczby zamkniętych. Konfigurowalne przez
- * config.php -> reports.max_resolution_days (domyślnie 90 dni).
+ * config.php -> reports.max_resolution_days (domyślnie 14 dni — zgodnie
+ * z decyzją zespołu: ticket wznowiony po dłuższej przerwie niż dwa tygodnie
+ * traktujemy jako "inną sprawę", a nie ciągłość tej samej obsługi).
  */
 function reports_max_resolution_days(): int
 {
-    $v = (int) cfg('reports.max_resolution_days', 90);
-    return $v > 0 ? $v : 90;
+    $v = (int) cfg('reports.max_resolution_days', 14);
+    return $v > 0 ? $v : 14;
 }
 
 /**
@@ -322,28 +324,55 @@ function report_staff_by_department(): array
 // nawet jeśli klient później sprawę odświeżył.
 // ---------------------------------------------------------------------------
 
-/** Podsumowanie: ile zamkniętych, średni czas rozwiązania i 1. odpowiedzi. */
+/**
+ * Podsumowanie: ile zamkniętych + średni czas rozwiązania (zakres dat liczony
+ * wg ZAMKNIĘCIA), oraz osobno średni czas pierwszej odpowiedzi (zakres dat
+ * liczony wg samej ODPOWIEDZI, nie zamknięcia). To rozdzielenie jest celowe —
+ * ticket założony np. w sierpniu, z pierwszą odpowiedzią w sierpniu, ale
+ * zamknięty dopiero we wrześniu, powinien zasilać statystykę pierwszej
+ * odpowiedzi za SIERPIEŃ (bo wtedy klient faktycznie dostał odpowiedź), a nie
+ * za wrzesień tylko dlatego, że wtedy ticket się zamknął.
+ */
 function report_closed_summary(?string $from, ?string $to): ?array
 {
     $T = tbl('ticket');
 
     $types = '';
     $params = [];
-    $sql = "SELECT
+    $sqlClosed = "SELECT
                 COUNT(*) AS total_closed,
-                AVG(" . reports_resolution_seconds_agg_expr() . ") AS avg_resolution_seconds,
-                AVG(CASE WHEN fr.first_response_at IS NOT NULL
-                         THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds,
-                SUM(CASE WHEN fr.first_response_at IS NOT NULL THEN 1 ELSE 0 END) AS with_response
+                AVG(" . reports_resolution_seconds_agg_expr() . ") AS avg_resolution_seconds
+            FROM $T t
+            WHERE t.closed IS NOT NULL ";
+    $sqlClosed .= reports_range('t.closed', $from, $to, $types, $params);
+    $closedRow = db_row($sqlClosed, $types, $params);
+
+    $typesFr = '';
+    $paramsFr = [];
+    $sqlFr = "SELECT
+                COUNT(*) AS with_response,
+                AVG(TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at)) AS avg_first_response_seconds
             FROM $T t "
          . reports_first_response_join()
-         . " WHERE t.closed IS NOT NULL ";
-    $sql .= reports_range('t.closed', $from, $to, $types, $params);
+         . " WHERE fr.first_response_at IS NOT NULL ";
+    $sqlFr .= reports_range('fr.first_response_at', $from, $to, $typesFr, $paramsFr);
+    $frRow = db_row($sqlFr, $typesFr, $paramsFr);
 
-    return db_row($sql, $types, $params);
+    return [
+        'total_closed'               => $closedRow['total_closed'] ?? 0,
+        'avg_resolution_seconds'     => $closedRow['avg_resolution_seconds'] ?? null,
+        'with_response'              => $frRow['with_response'] ?? 0,
+        'avg_first_response_seconds' => $frRow['avg_first_response_seconds'] ?? null,
+    ];
 }
 
-/** Zamknięte wg priorytetu: liczba, średni czas rozwiązania i 1. odpowiedzi. */
+/**
+ * Zamknięte wg priorytetu: liczba i średni czas rozwiązania (zakres dat wg
+ * ZAMKNIĘCIA), średni czas 1. odpowiedzi osobno (zakres dat wg ODPOWIEDZI) —
+ * patrz komentarz przy report_closed_summary. Priorytety z odpowiedziami
+ * w okresie, ale bez żadnego ticketu zamkniętego w tym samym okresie, nie
+ * dostaną własnego wiersza (ta tabela i tak jest zakotwiczona na "zamknięte").
+ */
 function report_closed_by_priority(?string $from, ?string $to): array
 {
     $ps     = schema_priority_source();
@@ -361,20 +390,44 @@ function report_closed_by_priority(?string $from, ?string $to): array
                 pr.priority_desc AS priority_name,
                 pr.priority_color,
                 COUNT(*) AS total,
-                AVG(" . reports_resolution_seconds_agg_expr() . ") AS avg_resolution_seconds,
-                AVG(CASE WHEN fr.first_response_at IS NOT NULL
-                         THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds
+                AVG(" . reports_resolution_seconds_agg_expr() . ") AS avg_resolution_seconds
             FROM $T t ";
     if ($hasCdata) {
         $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
     }
-    $sql .= " LEFT JOIN $PR pr ON pr.priority_id = " . ($priCol ?? 'NULL') . " "
-         . reports_first_response_join()
-         . " WHERE t.closed IS NOT NULL ";
+    $sql .= " LEFT JOIN $PR pr ON pr.priority_id = " . ($priCol ?? 'NULL') . "
+              WHERE t.closed IS NOT NULL ";
     $sql .= reports_range('t.closed', $from, $to, $types, $params);
-    $sql .= " GROUP BY pr.priority_id ORDER BY total DESC";
+    $sql .= " GROUP BY pr.priority_id";
+    $rows = db_rows($sql, $types, $params);
 
-    return db_rows($sql, $types, $params);
+    $typesFr = '';
+    $paramsFr = [];
+    $sqlFr = "SELECT
+                pr.priority_id,
+                AVG(TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at)) AS avg_first_response_seconds
+            FROM $T t ";
+    if ($hasCdata) {
+        $sqlFr .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
+    }
+    $sqlFr .= " LEFT JOIN $PR pr ON pr.priority_id = " . ($priCol ?? 'NULL') . " "
+         . reports_first_response_join()
+         . " WHERE fr.first_response_at IS NOT NULL ";
+    $sqlFr .= reports_range('fr.first_response_at', $from, $to, $typesFr, $paramsFr);
+    $sqlFr .= " GROUP BY pr.priority_id";
+    $frByPriority = [];
+    foreach (db_rows($sqlFr, $typesFr, $paramsFr) as $r) {
+        $frByPriority[$r['priority_id']] = $r['avg_first_response_seconds'];
+    }
+
+    foreach ($rows as &$r) {
+        $r['avg_first_response_seconds'] = $frByPriority[$r['priority_id']] ?? null;
+    }
+    unset($r);
+
+    usort($rows, function ($a, $b) { return ($b['total'] ?? 0) <=> ($a['total'] ?? 0); });
+
+    return $rows;
 }
 
 /** Zamknięte wg działu: liczba i średni czas rozwiązania. */
@@ -616,7 +669,14 @@ function report_breakdown(string $dimension, string $metric, ?string $from, ?str
     if ($needFr) {
         $sql .= reports_first_response_join();
     }
-    $sql .= " WHERE t.closed IS NOT NULL " . $exists;
+    // Pierwsza odpowiedź zakotwiczona jest na dacie samej ODPOWIEDZI, nie
+    // zamknięcia — ticket, który dostał odpowiedź w sierpniu, ale zamknął się
+    // dopiero we wrześniu, ma liczyć się do sierpnia (patrz komentarz przy
+    // report_closed_summary). Dlatego dla tej metryki NIE wymagamy
+    // t.closed IS NOT NULL — ticket może być nadal otwarty.
+    $sql .= $needFr
+        ? " WHERE fr.first_response_at IS NOT NULL " . $exists
+        : " WHERE t.closed IS NOT NULL " . $exists;
 
     // Filtr działów + aktywności — tylko dla pracowników.
     if ($dimension === 'staff') {
@@ -630,7 +690,9 @@ function report_breakdown(string $dimension, string $metric, ?string $from, ?str
         }
     }
 
-    $sql .= reports_range('t.closed', $from, $to, $types, $params);
+    $sql .= $needFr
+        ? reports_range('fr.first_response_at', $from, $to, $types, $params)
+        : reports_range('t.closed', $from, $to, $types, $params);
     $sql .= " GROUP BY entity_id, pr.priority_id
               HAVING entity_id IS NOT NULL
               ORDER BY entity_name ASC, pr.priority_urgency DESC";

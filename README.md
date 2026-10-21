@@ -151,12 +151,23 @@ Pulpit jest podzielony na zakładki: Przegląd / Priorytety / Pracownicy / Oceny
   przykład: „proszę o przedłużenie certyfikatu" na tickecie z 2024 roku) liczyłby
   się jako „otwarcie→zamknięcie" trwające LATA, gdyby po prostu odjąć datę
   zamknięcia od daty utworzenia. Każdy ticket, u którego ta różnica przekracza
-  próg z `config.php` → `reports.max_resolution_days` (domyślnie **90 dni**),
+  próg z `config.php` → `reports.max_resolution_days` (domyślnie **14 dni** —
+  decyzja zespołu: ticket wznowiony po dłuższej przerwie niż dwa tygodnie to
+  już raczej inna sprawa niż ciąg dalszy tej samej obsługi),
   jest wykluczany z uśrednień/sum czasu rozwiązania (analityka zamkniętych,
   mapa cieplna, ranking priorytetowy) — ale nadal liczy się jako zamknięty
   (nie znika z żadnych liczników ticketów). Na surowych listach (raport główny,
   rozwinięcie agenta, kontrola jakości) taki ticket nadal jest widoczny, tylko
   oznaczony ikoną ⏳ z podpowiedzią, dlaczego jego czas jest pominięty w średniej.
+- **Czas pierwszej odpowiedzi liczy się do miesiąca, w którym padła ODPOWIEDŹ,
+  nie do miesiąca zamknięcia ticketa.** Przykład zgłoszony przez kierownika:
+  ticket założony w sierpniu, pierwsza odpowiedź też w sierpniu, ale ticket
+  zamknięty dopiero we wrześniu — wcześniej cały ticket (razem z czasem 1.
+  odpowiedzi) trafiał do statystyk września, bo wszystko liczyliśmy po dacie
+  zamknięcia. Teraz „średni czas 1. odpowiedzi" (podsumowanie, wykresy wg
+  priorytetu, mapa cieplna) filtruje zakres dat po **dacie samej odpowiedzi**,
+  a „średni czas rozwiązania" nadal po **dacie zamknięcia** — to dwie osobne,
+  świadomie różne miary dla tego samego ticketa.
 - **Czas pierwszej odpowiedzi** liczony jest jako pierwsza odpowiedź agenta (człowieka)
   w wątku. Automatyczne auto-odpowiedzi są pomijane (`staff_id > 0`). To założenie łatwo
   zmienić w `lib/reports.php`.

@@ -79,7 +79,9 @@ return [
         // Tickety, których czas rozwiązania przekracza tyle dni, są WYKLUCZANE
         // z uśrednień czasu rozwiązania (żeby nie zawyżały statystyk o lata),
         // ale nadal liczą się jako zamknięte — i nadal widać je na surowych
-        // listach, oznaczone jako "wznowiony po długiej przerwie".
-        'max_resolution_days' => (int) (getenv('OSTA_MAX_RESOLUTION_DAYS') ?: 90),
+        // listach, oznaczone jako "wznowiony po długiej przerwie". Domyślnie
+        // 14 dni — decyzja zespołu: wznowienie po dłuższej przerwie niż dwa
+        // tygodnie traktujemy jako inną sprawę, nie ciąg dalszy tej samej.
+        'max_resolution_days' => (int) (getenv('OSTA_MAX_RESOLUTION_DAYS') ?: 14),
     ],
 ];

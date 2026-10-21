@@ -758,8 +758,10 @@ async function loadBreakdown() {
         const resp = await api('breakdown', params);
         const isTime = resp.meta ? !!resp.meta.is_time : true;
         buildBreakdownTable(resp.data || [], isTime);
-        $('#bd-note').textContent = 'Dane dla ticketów zamkniętych w wybranym zakresie dat'
-            + (staffOnly ? ' · przypisany agent.' : '.');
+        const anchor = CURRENT_METRIC === 'avg_first_response'
+            ? 'Dane dla ticketów, które dostały pierwszą odpowiedź w wybranym zakresie dat (niezależnie, czy są już zamknięte)'
+            : 'Dane dla ticketów zamkniętych w wybranym zakresie dat';
+        $('#bd-note').textContent = anchor + (staffOnly ? ' · przypisany agent.' : '.');
     } catch (e) {
         if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
         tbody.innerHTML = `<tr><td class="error">Błąd: ${esc(e.message)}</td></tr>`;
