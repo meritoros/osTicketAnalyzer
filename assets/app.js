@@ -201,8 +201,10 @@ async function api(report, params = {}) {
 
 // --- Pomocnicze ------------------------------------------------------------
 
+let DATE_BASIS = 'closed'; // 'closed' | 'created' — przełącznik "Statystyki liczone wg daty"
+
 function currentFilters() {
-    return { from: $('#f-from').value, to: $('#f-to').value };
+    return { from: $('#f-from').value, to: $('#f-to').value, date_basis: DATE_BASIS };
 }
 
 function fmtDuration(seconds) {
@@ -245,6 +247,13 @@ let lastMainRows = [];
 async function loadMain() {
     const priorityIds = selectedPriorityIds();
     const tbody = $('#main-table tbody');
+    const basisCreated = DATE_BASIS === 'created';
+    const title = $('#main-title');
+    if (title) {
+        title.textContent = basisCreated
+            ? 'Zgłoszenia o wybranych priorytetach (wg daty zgłoszenia)'
+            : 'Zamknięte zgłoszenia o wybranych priorytetach';
+    }
     if (!priorityIds.length) {
         tbody.innerHTML = '<tr><td colspan="9" class="muted">Wybierz co najmniej jeden priorytet.</td></tr>';
         return;
@@ -265,8 +274,15 @@ async function loadMain() {
         const avg = withResp.length
             ? Math.round(withResp.reduce((a, r) => a + Number(r.first_response_seconds), 0) / withResp.length)
             : null;
-        $('#main-summary').textContent =
-            `Zgłoszeń: ${data.length} · z odpowiedzią: ${withResp.length} · średni czas do 1. odpowiedzi: ${fmtDuration(avg)}`;
+        if (basisCreated) {
+            const closedCount = data.filter((r) => Number(r.is_closed) === 1).length;
+            $('#main-summary').textContent =
+                `Zgłoszeń: ${data.length} · zamkniętych: ${closedCount} · nadal otwartych: ${data.length - closedCount} `
+                + `· z odpowiedzią: ${withResp.length} · średni czas do 1. odpowiedzi: ${fmtDuration(avg)}`;
+        } else {
+            $('#main-summary').textContent =
+                `Zgłoszeń: ${data.length} · z odpowiedzią: ${withResp.length} · średni czas do 1. odpowiedzi: ${fmtDuration(avg)}`;
+        }
 
         tbody.innerHTML = data.map((r) => `
             <tr>
@@ -277,7 +293,7 @@ async function loadMain() {
                 <td>${esc(fmtDateTime(r.opened_at))}</td>
                 <td>${esc(fmtDateTime(r.first_response_at))}</td>
                 <td>${durBadge(r.first_response_seconds, 'fr')}</td>
-                <td>${esc(fmtDateTime(r.closed_at))}</td>
+                <td>${Number(r.is_closed) === 1 ? esc(fmtDateTime(r.closed_at)) : '<span class="muted">nadal otwarty</span>'}</td>
                 <td>${durBadge(r.resolution_seconds, 'res', r.resolution_is_outlier)}</td>
             </tr>`).join('');
     } catch (e) {
@@ -467,12 +483,38 @@ async function loadClosedAnalytics() {
     const byPriority = res.by_priority || [];
     const byDept = res.by_department || [];
     const overTime = res.over_time || [];
+    const basisCreated = (res.basis || DATE_BASIS) === 'created';
 
     const num = (v) => (v != null ? Number(v).toLocaleString('pl-PL') : '0');
-    $('#kpi-closed').textContent    = num(summary.total_closed);
+    const closedLabelEl = document.querySelector('#kpi-closed').closest('.kpi').querySelector('.kpi-label');
+    const stillOpenBox = $('#kpi-stillopen-box');
+    if (basisCreated) {
+        if (closedLabelEl) closedLabelEl.textContent = 'Utworzonych';
+        $('#kpi-closed').textContent = num(summary.total);
+        if (stillOpenBox) { stillOpenBox.hidden = false; $('#kpi-stillopen').textContent = num(summary.still_open); }
+    } else {
+        if (closedLabelEl) closedLabelEl.textContent = 'Zamkniętych';
+        $('#kpi-closed').textContent = num(summary.total_closed);
+        if (stillOpenBox) stillOpenBox.hidden = true;
+    }
     $('#kpi-resolution').textContent = fmtDuration(summary.avg_resolution_seconds != null ? Math.round(summary.avg_resolution_seconds) : null);
     $('#kpi-firstresp').textContent = fmtDuration(summary.avg_first_response_seconds != null ? Math.round(summary.avg_first_response_seconds) : null);
     $('#kpi-withresp').textContent  = num(summary.with_response);
+
+    const basisNote = $('#ca-basis-note');
+    if (basisNote) {
+        basisNote.innerHTML = basisCreated
+            ? 'Liczone dla ticketów <strong>utworzonych</strong> w wybranym zakresie dat — niezależnie, czy są już zamknięte. Dzięki temu widać też tickety wciąż czekające na zamknięcie, a nie tylko te, które zdążyły się już zamknąć.'
+            : 'Liczone dla ticketów, które <strong>miały zamknięcie</strong> w wybranym zakresie dat — nawet jeśli klient później sprawę odświeżył i ticket wrócił do statusu otwarty (patrz zakładka <em>Kontrola</em>). Dzięki temu liczby dla przeszłych okresów się nie zmieniają z dnia na dzień i są bliższe natywnemu raportowi „Aktywność zgłoszeń" w osTickecie.';
+    }
+    const priLabel = basisCreated ? 'Utworzone wg priorytetu' : 'Zamknięte wg priorytetu';
+    const timeLabel = basisCreated ? 'Utworzone w czasie' : 'Zamknięte w czasie';
+    const deptLabel = basisCreated ? 'Utworzone wg działu' : 'Zamknięte wg działu';
+    const deptColLabel = basisCreated ? 'Utworzonych' : 'Zamkniętych';
+    if ($('#h-closed-priority')) $('#h-closed-priority').textContent = priLabel;
+    if ($('#h-closed-time')) $('#h-closed-time').textContent = timeLabel;
+    if ($('#h-closed-dept')) $('#h-closed-dept').textContent = deptLabel;
+    if ($('#h-closed-dept-count')) $('#h-closed-dept-count').textContent = deptColLabel;
 
     drawChart('chart-closed-priority', {
         type: 'doughnut',
@@ -533,7 +575,7 @@ async function loadClosedAnalytics() {
         data: {
             labels: overTime.map((r) => r.day),
             datasets: [{
-                label: 'Zamknięte', data: overTime.map((r) => Number(r.closed)),
+                label: timeLabel, data: overTime.map((r) => Number(r.closed)),
                 borderColor: BRAND, backgroundColor: BRAND, tension: 0.25, fill: false,
             }],
         },
@@ -1225,6 +1267,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     $('#f-apply').addEventListener('click', applyAll);
     $('#f-csv').addEventListener('click', exportCsv);
+
+    // Przełącznik "Statystyki liczone wg daty" (zgłoszenia / zamknięcia) —
+    // dotyczy raportu głównego i Analityki zamkniętych ticketów.
+    $('#date-basis-tabs').addEventListener('click', (ev) => {
+        const btn = ev.target.closest('.dim-tab');
+        if (!btn) return;
+        document.querySelectorAll('#date-basis-tabs .dim-tab').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        DATE_BASIS = btn.dataset.basis;
+        loadMain();
+        loadClosedAnalytics();
+        loadOverview();
+    });
 
     // Zakładki nawigacji
     document.querySelectorAll('.nav-item[data-tab]').forEach((n) => {

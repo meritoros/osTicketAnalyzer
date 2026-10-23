@@ -107,6 +107,13 @@ $assetVer = static function (string $rel): string {
                 <div class="field"><label for="f-from">Od</label><input type="date" id="f-from"></div>
                 <div class="field"><label for="f-to">Do</label><input type="date" id="f-to"></div>
                 <div class="field">
+                    <label>Statystyki liczone wg daty</label>
+                    <div class="dim-tabs" id="date-basis-tabs" style="margin-bottom:0">
+                        <button type="button" class="dim-tab active" data-basis="closed" title="Tak jak teraz: ticket liczy się do okresu, w którym został zamknięty">Zamknięcia</button>
+                        <button type="button" class="dim-tab" data-basis="created" title="Ticket liczy się do okresu, w którym powstał — niezależnie, czy jest już zamknięty">Zgłoszenia</button>
+                    </div>
+                </div>
+                <div class="field">
                     <label>Priorytety (wszędzie w panelu)</label>
                     <div class="msel" id="f-priority-msel"></div>
                 </div>
@@ -231,7 +238,7 @@ $assetVer = static function (string $rel): string {
                 </section>
 
                 <section class="card">
-                    <h2>Zamknięte zgłoszenia o wybranych priorytetach</h2>
+                    <h2 id="main-title">Zamknięte zgłoszenia o wybranych priorytetach</h2>
                     <p class="section-hint" id="main-summary">Czasy dla zamkniętych ticketów wybranego priorytetu.</p>
                     <details id="main-details">
                         <summary><span class="chev" aria-hidden="true">▸</span><span>Lista ticketów (kliknij, aby rozwinąć)</span></summary>
@@ -252,19 +259,22 @@ $assetVer = static function (string $rel): string {
 
                 <section class="card">
                     <h2>Analityka zamkniętych ticketów</h2>
-                    <p class="section-hint">Liczone dla ticketów, które <strong>miały zamknięcie</strong> w wybranym
+                    <p class="section-hint"><span id="ca-basis-note">Liczone dla ticketów, które <strong>miały zamknięcie</strong> w wybranym
                         zakresie dat — nawet jeśli klient później sprawę odświeżył i ticket wrócił do statusu otwarty
                         (patrz zakładka <em>Kontrola</em>). Dzięki temu liczby dla przeszłych okresów się nie zmieniają
-                        z dnia na dzień i są bliższe natywnemu raportowi „Aktywność zgłoszeń" w osTickecie.
+                        z dnia na dzień i są bliższe natywnemu raportowi „Aktywność zgłoszeń" w osTickecie.</span>
                         <strong>Śr. czas rozwiązania</strong> pomija tickety wznowione po bardzo długiej przerwie
                         (stara sprawa z poprzednich lat, nowe pytanie klienta) — inaczej jeden taki ticket potrafiłby
                         zawyżyć średnią o miesiące. <strong>Śr. czas 1. odpowiedzi</strong> liczony jest osobno — wg
-                        miesiąca, w którym padła odpowiedź, a nie w którym ticket się zamknął.</p>
+                        miesiąca, w którym padła odpowiedź, a nie w którym ticket się zamknął.
+                        Przełącznik „Statystyki liczone wg daty" u góry dotyczy tej sekcji oraz raportu głównego
+                        poniżej (nie dotyczy mapy cieplnej, ocen i kontroli jakości — tam zostaje jak było).</p>
                     <div class="kpi-row">
                         <div class="kpi accent"><div class="kpi-label">Zamkniętych</div><div class="kpi-value" id="kpi-closed">—</div></div>
                         <div class="kpi"><div class="kpi-label">Śr. czas rozwiązania</div><div class="kpi-value" id="kpi-resolution">—</div></div>
                         <div class="kpi"><div class="kpi-label">Śr. czas 1. odpowiedzi</div><div class="kpi-value" id="kpi-firstresp">—</div></div>
                         <div class="kpi"><div class="kpi-label">Z odpowiedzią</div><div class="kpi-value" id="kpi-withresp">—</div></div>
+                        <div class="kpi" id="kpi-stillopen-box" hidden><div class="kpi-label">Nadal otwartych</div><div class="kpi-value" id="kpi-stillopen">—</div></div>
                     </div>
                 </section>
 
@@ -273,15 +283,15 @@ $assetVer = static function (string $rel): string {
                     <section class="card"><h2>Śr. czas rozwiązania wg priorytetu</h2><p class="section-hint">otwarcie → zamknięcie · liczone wg daty zamknięcia</p><div class="chart-box"><canvas id="chart-closed-restime"></canvas></div></section>
                 </div>
                 <div class="grid-2">
-                    <section class="card"><h2>Zamknięte wg priorytetu</h2><div class="chart-box"><canvas id="chart-closed-priority"></canvas></div></section>
-                    <section class="card"><h2>Zamknięte w czasie</h2><div class="chart-box"><canvas id="chart-closed-time"></canvas></div></section>
+                    <section class="card"><h2 id="h-closed-priority">Zamknięte wg priorytetu</h2><div class="chart-box"><canvas id="chart-closed-priority"></canvas></div></section>
+                    <section class="card"><h2 id="h-closed-time">Zamknięte w czasie</h2><div class="chart-box"><canvas id="chart-closed-time"></canvas></div></section>
                 </div>
 
                 <section class="card">
-                    <h2>Zamknięte wg działu</h2>
+                    <h2 id="h-closed-dept">Zamknięte wg działu</h2>
                     <div class="table-scroll" style="margin-top:12px">
                         <table class="grid" id="closed-dept-table">
-                            <thead><tr><th>Dział</th><th>Zamkniętych</th><th>Śr. czas rozwiązania</th></tr></thead>
+                            <thead><tr><th>Dział</th><th id="h-closed-dept-count">Zamkniętych</th><th>Śr. czas rozwiązania</th></tr></thead>
                             <tbody><tr><td colspan="3" class="muted">Ładowanie…</td></tr></tbody>
                         </table>
                     </div>

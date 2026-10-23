@@ -128,6 +128,18 @@ Pulpit jest podzielony na zakładki: Przegląd / Priorytety / Pracownicy / Oceny
 
 ## Uwagi
 
+- **Przełącznik „Statystyki liczone wg daty"** (pasek filtrów u góry, obok
+  priorytetów): **Zamknięcia** (domyślnie) vs **Zgłoszenia**. Dotyczy raportu
+  głównego i „Analityki zamkniętych ticketów" (nie dotyczy mapy cieplnej, ocen
+  ani kontroli jakości — tam zakotwiczenie zostaje bez zmian). W trybie
+  „Zgłoszenia" ticket liczy się do okresu, w którym POWSTAŁ, niezależnie od
+  tego, czy jest już zamknięty — więc widać też tickety wciąż czekające na
+  zamknięcie (nowa karta „Nadal otwartych"), a nie tylko te, które zdążyły się
+  już zamknąć. Przykład zgłoszony przez kierownika: 20 ticketów założonych
+  w sierpniu i zamkniętych dopiero we wrześniu — w trybie „Zamknięcia" liczą
+  się do września (bo wtedy faktycznie się zamknęły), w trybie „Zgłoszenia"
+  liczą się do sierpnia (bo wtedy powstały), a jeśli coś jeszcze nie zamknięte,
+  widać to wprost jako „nadal otwarty" zamiast znikać z zestawienia.
 - **Definicja „zamknięty w okresie" — dlaczego liczby są stabilne w czasie.**
   Wszystkie raporty „zamkniętych" ticketów (analityka, mapa cieplna, oceny, ranking
   priorytetowy, raport główny) liczą ticket jako zamknięty w danym dniu/okresie na

@@ -109,10 +109,19 @@ function reports_resolution_outlier_expr(): string
 }
 
 /**
- * RAPORT GŁÓWNY: zamknięte zgłoszenia o wybranym priorytecie
- * wraz z datą/godziną zgłoszenia, pierwszej odpowiedzi i czasem do niej.
+ * RAPORT GŁÓWNY: zgłoszenia o wybranym priorytecie wraz z datą/godziną
+ * zgłoszenia, pierwszej odpowiedzi i czasem do niej.
+ *
+ * @param string $basis 'closed' (domyślnie) — ticket liczy się do okresu,
+ *               w którym został ZAMKNIĘTY, i musi być już zamknięty (tak
+ *               jak w "Analityce zamkniętych ticketów"); 'created' — ticket
+ *               liczy się do okresu, w którym POWSTAŁ, niezależnie od tego,
+ *               czy jest już zamknięty — żeby dało się zobaczyć też tickety
+ *               utworzone w okresie, które jeszcze czekają na zamknięcie
+ *               (zgłoszone przez kierownika: ticket z sierpnia zamknięty we
+ *               wrześniu nie powinien "znikać" z sierpniowej statystyki).
  */
-function report_high_priority_closed(array $priorityIds, ?string $from, ?string $to, int $limit = 2000): array
+function report_high_priority_closed(array $priorityIds, ?string $from, ?string $to, string $basis = 'closed', int $limit = 2000): array
 {
     $ps     = schema_priority_source();
     $priCol = reports_priority_expr($ps);
@@ -146,7 +155,8 @@ function report_high_priority_closed(array $priorityIds, ?string $from, ?string 
                      THEN TIMESTAMPDIFF(SECOND, t.created, t.closed)
                      ELSE NULL END                 AS resolution_seconds,
                 CASE WHEN t.closed IS NOT NULL THEN " . reports_resolution_outlier_expr() . "
-                     ELSE 0 END                    AS resolution_is_outlier
+                     ELSE 0 END                    AS resolution_is_outlier,
+                CASE WHEN t.closed IS NOT NULL THEN 1 ELSE 0 END AS is_closed
              FROM $T t
              JOIN $S s ON s.id = t.status_id ";
 
@@ -164,16 +174,23 @@ function report_high_priority_closed(array $priorityIds, ?string $from, ?string 
                   WHERE te.type = 'R' AND te.staff_id > 0
                   GROUP BY te.thread_id
               ) fr ON fr.thread_id = th.id
-              WHERE t.closed IS NOT NULL ";
+              WHERE 1=1 ";
 
     $types  = '';
     $params = [];
 
+    if ($basis === 'created') {
+        $sql .= reports_range('t.created', $from, $to, $types, $params);
+        $dateCol = 't.created';
+    } else {
+        $sql .= ' AND t.closed IS NOT NULL ';
+        $sql .= reports_range('t.closed', $from, $to, $types, $params);
+        $dateCol = 't.closed';
+    }
     $sql .= reports_priority_filter($priCol, $priorityIds, $types, $params);
-    $sql .= reports_date_where($from, $to, $types, $params);
 
     $limit = max(1, min($limit, 10000));
-    $sql  .= ' ORDER BY t.created DESC LIMIT ' . $limit;
+    $sql  .= " ORDER BY $dateCol DESC LIMIT " . $limit;
 
     return db_rows($sql, $types, $params);
 }
@@ -325,17 +342,43 @@ function report_staff_by_department(): array
 // ---------------------------------------------------------------------------
 
 /**
- * Podsumowanie: ile zamkniętych + średni czas rozwiązania (zakres dat liczony
- * wg ZAMKNIĘCIA), oraz osobno średni czas pierwszej odpowiedzi (zakres dat
- * liczony wg samej ODPOWIEDZI, nie zamknięcia). To rozdzielenie jest celowe —
- * ticket założony np. w sierpniu, z pierwszą odpowiedzią w sierpniu, ale
- * zamknięty dopiero we wrześniu, powinien zasilać statystykę pierwszej
- * odpowiedzi za SIERPIEŃ (bo wtedy klient faktycznie dostał odpowiedź), a nie
- * za wrzesień tylko dlatego, że wtedy ticket się zamknął.
+ * Podsumowanie: ile zamkniętych + średni czas rozwiązania, oraz osobno
+ * średni czas pierwszej odpowiedzi.
+ *
+ * @param string $basis 'closed' (domyślnie) — wszystko zakotwiczone na dacie
+ *               ZAMKNIĘCIA (ale czas 1. odpowiedzi nadal liczony wg daty
+ *               samej odpowiedzi — patrz niżej); 'created' — populacja to
+ *               tickety UTWORZONE w zakresie dat, niezależnie od tego, czy
+ *               są już zamknięte — dodatkowo zwraca 'total' (wszystkie
+ *               utworzone) i 'still_open' (ile z nich wciąż czeka).
+ *
+ * Niezależnie od $basis, czas pierwszej odpowiedzi liczy się do miesiąca,
+ * w którym FAKTYCZNIE padła odpowiedź — ticket założony w sierpniu z
+ * odpowiedzią w sierpniu, ale zamknięty we wrześniu, ma zasilać sierpniową
+ * statystykę odpowiedzi, a nie wrześniową tylko dlatego, że wtedy się zamknął.
  */
-function report_closed_summary(?string $from, ?string $to): ?array
+function report_closed_summary(?string $from, ?string $to, string $basis = 'closed'): ?array
 {
     $T = tbl('ticket');
+
+    if ($basis === 'created') {
+        $types = '';
+        $params = [];
+        $sql = "SELECT
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN t.closed IS NOT NULL THEN 1 ELSE 0 END) AS total_closed,
+                    SUM(CASE WHEN t.closed IS NULL THEN 1 ELSE 0 END) AS still_open,
+                    AVG(CASE WHEN t.closed IS NOT NULL THEN " . reports_resolution_seconds_agg_expr() . " END) AS avg_resolution_seconds,
+                    AVG(CASE WHEN fr.first_response_at IS NOT NULL
+                             THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds,
+                    SUM(CASE WHEN fr.first_response_at IS NOT NULL THEN 1 ELSE 0 END) AS with_response
+                FROM $T t "
+             . reports_first_response_join()
+             . ' WHERE 1=1 ';
+        $sql .= reports_range('t.created', $from, $to, $types, $params);
+        $row = db_row($sql, $types, $params);
+        return $row ?: null;
+    }
 
     $types = '';
     $params = [];
@@ -367,13 +410,11 @@ function report_closed_summary(?string $from, ?string $to): ?array
 }
 
 /**
- * Zamknięte wg priorytetu: liczba i średni czas rozwiązania (zakres dat wg
- * ZAMKNIĘCIA), średni czas 1. odpowiedzi osobno (zakres dat wg ODPOWIEDZI) —
- * patrz komentarz przy report_closed_summary. Priorytety z odpowiedziami
- * w okresie, ale bez żadnego ticketu zamkniętego w tym samym okresie, nie
- * dostaną własnego wiersza (ta tabela i tak jest zakotwiczona na "zamknięte").
+ * Wg priorytetu: liczba i średni czas rozwiązania, średni czas 1. odpowiedzi
+ * osobno (patrz komentarz przy report_closed_summary co do $basis i zasady
+ * zakotwiczenia czasu 1. odpowiedzi na dacie samej odpowiedzi).
  */
-function report_closed_by_priority(?string $from, ?string $to): array
+function report_closed_by_priority(?string $from, ?string $to, string $basis = 'closed'): array
 {
     $ps     = schema_priority_source();
     $priCol = reports_priority_expr($ps);
@@ -382,6 +423,31 @@ function report_closed_by_priority(?string $from, ?string $to): array
     $PR = tbl('ticket_priority');
     $CD = tbl('ticket__cdata');
     $hasCdata = $ps !== null && $ps['joinOnTicket'];
+
+    if ($basis === 'created') {
+        $types = '';
+        $params = [];
+        $sql = "SELECT
+                    pr.priority_id,
+                    pr.priority_desc AS priority_name,
+                    pr.priority_color,
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN t.closed IS NOT NULL THEN 1 ELSE 0 END) AS total_closed,
+                    SUM(CASE WHEN t.closed IS NULL THEN 1 ELSE 0 END) AS still_open,
+                    AVG(CASE WHEN t.closed IS NOT NULL THEN " . reports_resolution_seconds_agg_expr() . " END) AS avg_resolution_seconds,
+                    AVG(CASE WHEN fr.first_response_at IS NOT NULL
+                             THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds
+                FROM $T t ";
+        if ($hasCdata) {
+            $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
+        }
+        $sql .= " LEFT JOIN $PR pr ON pr.priority_id = " . ($priCol ?? 'NULL') . " "
+             . reports_first_response_join()
+             . ' WHERE 1=1 ';
+        $sql .= reports_range('t.created', $from, $to, $types, $params);
+        $sql .= ' GROUP BY pr.priority_id ORDER BY total DESC';
+        return db_rows($sql, $types, $params);
+    }
 
     $types = '';
     $params = [];
@@ -430,14 +496,31 @@ function report_closed_by_priority(?string $from, ?string $to): array
     return $rows;
 }
 
-/** Zamknięte wg działu: liczba i średni czas rozwiązania. */
-function report_closed_by_department(?string $from, ?string $to): array
+/** Wg działu: liczba i średni czas rozwiązania (patrz $basis przy report_closed_summary). */
+function report_closed_by_department(?string $from, ?string $to, string $basis = 'closed'): array
 {
     $T = tbl('ticket');
     $D = tbl('department');
 
     $types = '';
     $params = [];
+
+    if ($basis === 'created') {
+        $sql = "SELECT
+                    d.id AS dept_id,
+                    COALESCE(d.name, '(bez działu)') AS department,
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN t.closed IS NOT NULL THEN 1 ELSE 0 END) AS total_closed,
+                    SUM(CASE WHEN t.closed IS NULL THEN 1 ELSE 0 END) AS still_open,
+                    AVG(CASE WHEN t.closed IS NOT NULL THEN " . reports_resolution_seconds_agg_expr() . " END) AS avg_resolution_seconds
+                FROM $T t
+                LEFT JOIN $D d ON d.id = t.dept_id
+                WHERE 1=1 ";
+        $sql .= reports_range('t.created', $from, $to, $types, $params);
+        $sql .= ' GROUP BY d.id ORDER BY total DESC';
+        return db_rows($sql, $types, $params);
+    }
+
     $sql = "SELECT
                 d.id AS dept_id,
                 COALESCE(d.name, '(bez działu)') AS department,
@@ -452,13 +535,22 @@ function report_closed_by_department(?string $from, ?string $to): array
     return db_rows($sql, $types, $params);
 }
 
-/** Zamknięte w czasie (wg dnia zamknięcia). */
-function report_closed_over_time(?string $from, ?string $to): array
+/** W czasie — wg dnia zamknięcia albo wg dnia zgłoszenia (patrz $basis przy report_closed_summary). */
+function report_closed_over_time(?string $from, ?string $to, string $basis = 'closed'): array
 {
     $T = tbl('ticket');
 
     $types = '';
     $params = [];
+
+    if ($basis === 'created') {
+        $sql = "SELECT DATE(t.created) AS day, COUNT(*) AS closed
+                FROM $T t WHERE 1=1 ";
+        $sql .= reports_range('t.created', $from, $to, $types, $params);
+        $sql .= ' GROUP BY DATE(t.created) ORDER BY day ASC';
+        return db_rows($sql, $types, $params);
+    }
+
     $sql = "SELECT DATE(t.closed) AS day, COUNT(*) AS closed
             FROM $T t
             WHERE t.closed IS NOT NULL ";
@@ -469,7 +561,7 @@ function report_closed_over_time(?string $from, ?string $to): array
 }
 
 /** Przegląd do górnych KPI: otwarte teraz + skrót zamkniętych w okresie. */
-function report_overview(?string $from, ?string $to): array
+function report_overview(?string $from, ?string $to, string $basis = 'closed'): array
 {
     $T = tbl('ticket');
     $S = tbl('ticket_status');
@@ -478,7 +570,7 @@ function report_overview(?string $from, ?string $to): array
         "SELECT COUNT(*) AS c FROM $T t
          JOIN $S s ON s.id = t.status_id AND s.state = 'open'"
     );
-    $closed = report_closed_summary($from, $to);
+    $closed = report_closed_summary($from, $to, $basis);
 
     return [
         'open_now'                   => $openRow ? (int) $openRow['c'] : 0,
@@ -489,13 +581,14 @@ function report_overview(?string $from, ?string $to): array
 }
 
 /** Zbiorcza analityka zamkniętych ticketów (jeden endpoint dla frontu). */
-function report_closed_analytics(?string $from, ?string $to): array
+function report_closed_analytics(?string $from, ?string $to, string $basis = 'closed'): array
 {
     return [
-        'summary'       => report_closed_summary($from, $to),
-        'by_priority'   => report_closed_by_priority($from, $to),
-        'by_department' => report_closed_by_department($from, $to),
-        'over_time'     => report_closed_over_time($from, $to),
+        'summary'       => report_closed_summary($from, $to, $basis),
+        'by_priority'   => report_closed_by_priority($from, $to, $basis),
+        'by_department' => report_closed_by_department($from, $to, $basis),
+        'over_time'     => report_closed_over_time($from, $to, $basis),
+        'basis'         => $basis,
     ];
 }
 

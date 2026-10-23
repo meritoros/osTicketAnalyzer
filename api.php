@@ -47,6 +47,12 @@ $inIntArray = function (string $key) use ($body) {
     return $out;
 };
 
+/** 'closed' (domyślnie) albo 'created' — przełącznik "Statystyki liczone wg daty" w filtrach. */
+$inBasis = function () use ($in) {
+    $v = (string) $in('date_basis', 'closed');
+    return $v === 'created' ? 'created' : 'closed';
+};
+
 // --- Tryb 'prompt': użyj danych do bazy przysłanych z okienka -----------------
 $mode = (string) cfg('db.mode', 'config');
 if ($mode === 'prompt') {
@@ -82,7 +88,7 @@ try {
 
         case 'high_priority_closed':
             $priorityIds = $inIntArray('priority_ids');
-            json_response(['data' => report_high_priority_closed($priorityIds, $from, $to)]);
+            json_response(['data' => report_high_priority_closed($priorityIds, $from, $to, $inBasis())]);
             break;
 
         case 'volume':
@@ -108,11 +114,11 @@ try {
             break;
 
         case 'overview':
-            json_response(['data' => report_overview($from, $to)]);
+            json_response(['data' => report_overview($from, $to, $inBasis())]);
             break;
 
         case 'closed_analytics':
-            json_response(['data' => report_closed_analytics($from, $to)]);
+            json_response(['data' => report_closed_analytics($from, $to, $inBasis())]);
             break;
 
         case 'created_cohort':
