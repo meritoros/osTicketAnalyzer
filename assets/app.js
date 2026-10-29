@@ -271,8 +271,12 @@ async function loadMain() {
         }
 
         const withResp = data.filter((r) => r.first_response_seconds !== null);
-        const avg = withResp.length
-            ? Math.round(withResp.reduce((a, r) => a + Number(r.first_response_seconds), 0) / withResp.length)
+        // Tickety wznowione po długiej przerwie (⏳) liczą się do "z odpowiedzią"
+        // (to tylko licznik), ale NIE wliczamy ich do średniej — inaczej jeden
+        // taki ticket potrafi zafałszować średni czas do 1. odpowiedzi.
+        const withRespForAvg = withResp.filter((r) => !r.resolution_is_outlier);
+        const avg = withRespForAvg.length
+            ? Math.round(withRespForAvg.reduce((a, r) => a + Number(r.first_response_seconds), 0) / withRespForAvg.length)
             : null;
         if (basisCreated) {
             const closedCount = data.filter((r) => Number(r.is_closed) === 1).length;

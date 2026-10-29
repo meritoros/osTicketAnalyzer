@@ -263,10 +263,12 @@ $assetVer = static function (string $rel): string {
                         zakresie dat — nawet jeśli klient później sprawę odświeżył i ticket wrócił do statusu otwarty
                         (patrz zakładka <em>Kontrola</em>). Dzięki temu liczby dla przeszłych okresów się nie zmieniają
                         z dnia na dzień i są bliższe natywnemu raportowi „Aktywność zgłoszeń" w osTickecie.</span>
-                        <strong>Śr. czas rozwiązania</strong> pomija tickety wznowione po bardzo długiej przerwie
-                        (stara sprawa z poprzednich lat, nowe pytanie klienta) — inaczej jeden taki ticket potrafiłby
-                        zawyżyć średnią o miesiące. <strong>Śr. czas 1. odpowiedzi</strong> liczony jest osobno — wg
-                        miesiąca, w którym padła odpowiedź, a nie w którym ticket się zamknął.
+                        <strong>Śr. czas rozwiązania</strong> i <strong>śr. czas 1. odpowiedzi</strong> pomijają
+                        tickety wznowione po bardzo długiej przerwie (stara sprawa z poprzednich lat, nowe pytanie
+                        klienta) — inaczej jeden taki ticket potrafiłby zawyżyć obie średnie o miesiące; liczą się
+                        nadal do liczby zamkniętych. <strong>Śr. czas 1. odpowiedzi</strong> liczony jest dodatkowo
+                        osobno od czasu rozwiązania — wg miesiąca, w którym padła odpowiedź, a nie w którym ticket
+                        się zamknął.
                         Przełącznik „Statystyki liczone wg daty" u góry dotyczy tej sekcji oraz raportu głównego
                         poniżej (nie dotyczy mapy cieplnej, ocen i kontroli jakości — tam zostaje jak było).</p>
                     <div class="kpi-row">

@@ -166,11 +166,16 @@ Pulpit jest podzielony na zakładki: Przegląd / Priorytety / Pracownicy / Oceny
   próg z `config.php` → `reports.max_resolution_days` (domyślnie **14 dni** —
   decyzja zespołu: ticket wznowiony po dłuższej przerwie niż dwa tygodnie to
   już raczej inna sprawa niż ciąg dalszy tej samej obsługi),
-  jest wykluczany z uśrednień/sum czasu rozwiązania (analityka zamkniętych,
-  mapa cieplna, ranking priorytetowy) — ale nadal liczy się jako zamknięty
-  (nie znika z żadnych liczników ticketów). Na surowych listach (raport główny,
-  rozwinięcie agenta, kontrola jakości) taki ticket nadal jest widoczny, tylko
-  oznaczony ikoną ⏳ z podpowiedzią, dlaczego jego czas jest pominięty w średniej.
+  jest wykluczany z uśrednień/sum **zarówno czasu rozwiązania, jak i czasu
+  pierwszej odpowiedzi** (analityka zamkniętych, mapa cieplna, ranking
+  priorytetowy, raport główny) — ale nadal liczy się jako zamknięty/z
+  odpowiedzią (nie znika z żadnych liczników ticketów). Na surowych listach
+  (raport główny, rozwinięcie agenta, kontrola jakości) taki ticket nadal jest
+  widoczny, tylko oznaczony ikoną ⏳ z podpowiedzią, dlaczego jego czas jest
+  pominięty w średniej. Wcześniej próg obejmował tylko czas rozwiązania —
+  zgłoszony przez kierownika przypadek (reaktywacja ticketa z 2024 r. przez
+  "proszę o przedłużenie certyfikatu") pokazał, że bez rozszerzenia na czas
+  1. odpowiedzi taki ticket nadal potrafił wejść do innych statystyk.
 - **Czas pierwszej odpowiedzi liczy się do miesiąca, w którym padła ODPOWIEDŹ,
   nie do miesiąca zamknięcia ticketa.** Przykład zgłoszony przez kierownika:
   ticket założony w sierpniu, pierwsza odpowiedź też w sierpniu, ale ticket

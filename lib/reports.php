@@ -109,6 +109,24 @@ function reports_resolution_outlier_expr(): string
 }
 
 /**
+ * Wyrażenie SQL czasu 1. odpowiedzi (sekundy) do UŚREDNIEŃ — zwraca NULL dla
+ * ticketów, których faktyczne zamknięcie przekracza próg „wznowiony po
+ * długiej przerwie" (ta sama flaga ⏳ co przy czasie rozwiązania). Decyzja
+ * zespołu: ticket-widmo nie ma wpływać na ŻADNĄ statystykę czasową — ani
+ * rozwiązania, ani pierwszej odpowiedzi — liczy się wyłącznie do liczby
+ * ticketów. Ticket wciąż otwarty (t.closed IS NULL) nie jest tu niczym
+ * wykluczany — nie ma jeszcze zamknięcia, więc nie może być "wznowiony po
+ * przerwie" w tym sensie.
+ */
+function reports_first_response_seconds_agg_expr(): string
+{
+    $days = reports_max_resolution_days();
+    return "(CASE WHEN fr.first_response_at IS NOT NULL
+                   AND (t.closed IS NULL OR TIMESTAMPDIFF(DAY, t.created, t.closed) <= $days)
+                   THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END)";
+}
+
+/**
  * RAPORT GŁÓWNY: zgłoszenia o wybranym priorytecie wraz z datą/godziną
  * zgłoszenia, pierwszej odpowiedzi i czasem do niej.
  *
@@ -369,8 +387,7 @@ function report_closed_summary(?string $from, ?string $to, string $basis = 'clos
                     SUM(CASE WHEN t.closed IS NOT NULL THEN 1 ELSE 0 END) AS total_closed,
                     SUM(CASE WHEN t.closed IS NULL THEN 1 ELSE 0 END) AS still_open,
                     AVG(CASE WHEN t.closed IS NOT NULL THEN " . reports_resolution_seconds_agg_expr() . " END) AS avg_resolution_seconds,
-                    AVG(CASE WHEN fr.first_response_at IS NOT NULL
-                             THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds,
+                    AVG(" . reports_first_response_seconds_agg_expr() . ") AS avg_first_response_seconds,
                     SUM(CASE WHEN fr.first_response_at IS NOT NULL THEN 1 ELSE 0 END) AS with_response
                 FROM $T t "
              . reports_first_response_join()
@@ -394,7 +411,7 @@ function report_closed_summary(?string $from, ?string $to, string $basis = 'clos
     $paramsFr = [];
     $sqlFr = "SELECT
                 COUNT(*) AS with_response,
-                AVG(TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at)) AS avg_first_response_seconds
+                AVG(" . reports_first_response_seconds_agg_expr() . ") AS avg_first_response_seconds
             FROM $T t "
          . reports_first_response_join()
          . " WHERE fr.first_response_at IS NOT NULL ";
@@ -435,8 +452,7 @@ function report_closed_by_priority(?string $from, ?string $to, string $basis = '
                     SUM(CASE WHEN t.closed IS NOT NULL THEN 1 ELSE 0 END) AS total_closed,
                     SUM(CASE WHEN t.closed IS NULL THEN 1 ELSE 0 END) AS still_open,
                     AVG(CASE WHEN t.closed IS NOT NULL THEN " . reports_resolution_seconds_agg_expr() . " END) AS avg_resolution_seconds,
-                    AVG(CASE WHEN fr.first_response_at IS NOT NULL
-                             THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds
+                    AVG(" . reports_first_response_seconds_agg_expr() . ") AS avg_first_response_seconds
                 FROM $T t ";
         if ($hasCdata) {
             $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
@@ -471,7 +487,7 @@ function report_closed_by_priority(?string $from, ?string $to, string $basis = '
     $paramsFr = [];
     $sqlFr = "SELECT
                 pr.priority_id,
-                AVG(TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at)) AS avg_first_response_seconds
+                AVG(" . reports_first_response_seconds_agg_expr() . ") AS avg_first_response_seconds
             FROM $T t ";
     if ($hasCdata) {
         $sqlFr .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
@@ -644,8 +660,7 @@ function report_created_cohort(?string $from, ?string $to, array $deptIds = []):
                 $deletedExpr AS currently_deleted,
                 AVG(CASE WHEN s.state = 'closed'
                          THEN " . reports_resolution_seconds_agg_expr() . " END) AS avg_resolution_seconds,
-                AVG(CASE WHEN fr.first_response_at IS NOT NULL
-                         THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END) AS avg_first_response_seconds
+                AVG(" . reports_first_response_seconds_agg_expr() . ") AS avg_first_response_seconds
             FROM $T t
             LEFT JOIN $D d ON d.id = t.dept_id
             JOIN $S s ON s.id = t.status_id "
@@ -678,8 +693,7 @@ function reports_metric_expr(string $metric): string
         case 'sum_resolution':
             return 'SUM(' . reports_resolution_seconds_agg_expr() . ')';
         case 'avg_first_response':
-            return 'AVG(CASE WHEN fr.first_response_at IS NOT NULL
-                            THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) END)';
+            return 'AVG(' . reports_first_response_seconds_agg_expr() . ')';
         case 'count':
             return 'COUNT(*)';
         case 'avg_resolution':
@@ -896,7 +910,12 @@ function report_priority_ranking(array $priorityIds, ?string $from, ?string $to,
         $a = &$agents[$id];
         $a['count']++;
 
-        if ($r['first_response_seconds'] !== null) {
+        // Tickety "wznowione po długiej przerwie" (patrz reports_max_resolution_days)
+        // liczą się do count() i widać je w pełnej liście (tickets), ale NIE
+        // wliczamy ich do ŻADNEJ średniej czasowej — ani pierwszej odpowiedzi,
+        // ani rozwiązania — inaczej jeden ticket sprzed lat potrafiłby zawyżyć
+        // (albo sztucznie "poprawić") średnią agenta o miesiące.
+        if ($r['first_response_seconds'] !== null && empty($r['resolution_is_outlier'])) {
             $sec = (int) $r['first_response_seconds'];
             $a['fr_sum'] += $sec;
             $a['fr_count']++;
@@ -909,10 +928,6 @@ function report_priority_ranking(array $priorityIds, ?string $from, ?string $to,
                 ];
             }
         }
-        // Tickety "wznowione po długiej przerwie" (patrz reports_max_resolution_days)
-        // liczą się do count() i widać je w pełnej liście (tickets), ale NIE
-        // wliczamy ich do avg/max czasu rozwiązania — inaczej jeden ticket
-        // sprzed lat potrafiłby zawyżyć średnią agenta o miesiące.
         if ($r['resolution_seconds'] !== null && empty($r['resolution_is_outlier'])) {
             $sec = (int) $r['resolution_seconds'];
             $a['res_sum'] += $sec;
