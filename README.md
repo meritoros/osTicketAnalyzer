@@ -128,6 +128,28 @@ Pulpit jest podzielony na zakładki: Przegląd / Priorytety / Pracownicy / Oceny
 
 ## Uwagi
 
+- **Spójność między zakładkami Priorytety i Pracownicy.** Te zakładki potrafiły
+  pokazywać różne liczby dla tego samego pracownika/zakresu dat mimo pozornie
+  identycznych filtrów — przyczyny i poprawki:
+  - **Działy**: mapa cieplna domyślnie zawężała się po cichu do
+    `app.default_department`, Ranking priorytetowy zawsze pokazywał wszystkie
+    działy. Ujednolicone — oba domyślnie pokazują **wszystkie działy**.
+  - **"Tylko aktywne konta"**: różne domyślne wartości checkboksa w obu
+    zakładkach. Ujednolicone — oba domyślnie pokazują **wszystkie konta**.
+  - **"Kto obsługuje/zgłasza najwięcej"** (Pracownicy) liczyło zawsze po dacie
+    zgłoszenia, ignorując przełącznik „Statystyki liczone wg daty". Teraz
+    respektuje ten sam przełącznik co reszta panelu.
+  - **Śr. czas 1. odpowiedzi w Rankingu priorytetowym** liczył się tylko
+    z ticketów zamkniętych w zakresie dat (bo cały wiersz ticketa pochodził
+    z zapytania ograniczonego do zamkniętych) — inna populacja niż w mapie
+    cieplnej, gdzie ta miara liczy się z ticketów, które dostały odpowiedź
+    w zakresie, niezależnie od tego czy są już zamknięte. Ranking liczy to
+    teraz tą samą metodą co mapa cieplna (`report_priority_first_response_tickets()`
+    w `lib/reports.php`) — osobne zapytanie zakotwiczone na dacie odpowiedzi,
+    niezależne od zapytania liczącego czas rozwiązania.
+  - Pozostała, celowa różnica: Ranking domyślnie zawęża się do priorytetów
+    "Wysoki"-podobnych (to jego sens — "priorytetowe zgłoszenia"), mapa
+    cieplna pokazuje wszystkie priorytety jako osobne kolumny. To nie błąd.
 - **Przełącznik „Statystyki liczone wg daty"** (pasek filtrów u góry, obok
   priorytetów): **Zamknięcia** (domyślnie) vs **Zgłoszenia**. Dotyczy raportu
   głównego i „Analityki zamkniętych ticketów" (nie dotyczy mapy cieplnej, ocen

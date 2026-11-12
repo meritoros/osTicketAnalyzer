@@ -270,7 +270,8 @@ $assetVer = static function (string $rel): string {
                         osobno od czasu rozwiązania — wg miesiąca, w którym padła odpowiedź, a nie w którym ticket
                         się zamknął.
                         Przełącznik „Statystyki liczone wg daty" u góry dotyczy tej sekcji oraz raportu głównego
-                        poniżej (nie dotyczy mapy cieplnej, ocen i kontroli jakości — tam zostaje jak było).</p>
+                        poniżej oraz wykresów "Kto obsługuje/zgłasza najwięcej" w zakładce Pracownicy
+                        (nie dotyczy mapy cieplnej, ocen i kontroli jakości — tam zostaje jak było).</p>
                     <div class="kpi-row">
                         <div class="kpi accent"><div class="kpi-label">Zamkniętych</div><div class="kpi-value" id="kpi-closed">—</div></div>
                         <div class="kpi"><div class="kpi-label">Śr. czas rozwiązania</div><div class="kpi-value" id="kpi-resolution">—</div></div>
@@ -343,7 +344,7 @@ $assetVer = static function (string $rel): string {
                         </div>
                         <div class="field bd-staff-only">
                             <label>Konta</label>
-                            <label class="switch"><input type="checkbox" id="bd-active" checked><span class="slider"></span><span class="switch-label" id="bd-active-label">tylko włączone</span></label>
+                            <label class="switch"><input type="checkbox" id="bd-active"><span class="slider"></span><span class="switch-label" id="bd-active-label">wszystkie</span></label>
                         </div>
                     </div>
                     <p class="section-hint" id="bd-note"></p>

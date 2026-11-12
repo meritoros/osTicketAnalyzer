@@ -663,21 +663,23 @@ async function loadDepartmentsFilter() {
     try {
         const { data } = await api('departments');
         DEPARTMENTS = data || [];
-        const def = (window.OSTA && window.OSTA.defaultDept) || '';
-        const preferred = DEPARTMENTS.filter((d) => d.name === def).map((d) => String(d.id));
-        const bdDefault = preferred.length ? preferred : DEPARTMENTS.map((d) => String(d.id));
+        // Ujednolicone z resztą panelu: domyślnie WSZYSTKIE działy wszędzie —
+        // wcześniej mapa cieplna po cichu zawężała się do app.default_department,
+        // co dawało inne wyniki niż Ranking priorytetowy (zawsze "wszystkie")
+        // dla tego samego pracownika przy pozornie tych samych filtrach.
+        const allDeptIds = DEPARTMENTS.map((d) => String(d.id));
 
         if (bdEl) {
             DEPT_MSEL = createMultiSelect(bdEl, DEPARTMENTS, {
                 getId: (d) => d.id, getLabel: (d) => d.name,
-                selected: bdDefault,
+                selected: allDeptIds,
                 onChange: () => loadBreakdown(),
             });
         }
         if (prEl) {
             PR_DEPT_MSEL = createMultiSelect(prEl, DEPARTMENTS, {
                 getId: (d) => d.id, getLabel: (d) => d.name,
-                selected: DEPARTMENTS.map((d) => String(d.id)), // ranking: domyślnie wszystkie działy
+                selected: allDeptIds, // ranking: domyślnie wszystkie działy
                 onChange: () => loadPriorityRanking(),
             });
         }

@@ -97,12 +97,12 @@ try {
 
         case 'by_agent':
             $limit = (int) $in('limit', 50);
-            json_response(['data' => report_by_agent($from, $to, max(1, min($limit, 500)))]);
+            json_response(['data' => report_by_agent($from, $to, max(1, min($limit, 500)), $inBasis())]);
             break;
 
         case 'by_submitter':
             $limit = (int) $in('limit', 50);
-            json_response(['data' => report_by_submitter($from, $to, max(1, min($limit, 500)))]);
+            json_response(['data' => report_by_submitter($from, $to, max(1, min($limit, 500)), $inBasis())]);
             break;
 
         case 'by_priority':

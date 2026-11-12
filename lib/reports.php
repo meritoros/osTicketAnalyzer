@@ -249,10 +249,11 @@ function report_volume(?string $from, ?string $to): array
 }
 
 /** Kto obsługuje najwięcej ticketów (agent przypisany). */
-function report_by_agent(?string $from, ?string $to, int $limit = 50): array
+function report_by_agent(?string $from, ?string $to, int $limit = 50, string $basis = 'closed'): array
 {
     $T  = tbl('ticket');
     $ST = tbl('staff');
+    $dateCol = $basis === 'closed' ? 't.closed' : 't.created';
 
     $types = '';
     $params = [];
@@ -262,17 +263,21 @@ function report_by_agent(?string $from, ?string $to, int $limit = 50): array
             FROM $T t
             LEFT JOIN $ST st ON st.staff_id = t.staff_id
             WHERE t.staff_id > 0 ";
-    $sql .= reports_date_where($from, $to, $types, $params);
+    if ($basis === 'closed') {
+        $sql .= ' AND t.closed IS NOT NULL ';
+    }
+    $sql .= reports_range($dateCol, $from, $to, $types, $params);
     $sql .= ' GROUP BY st.staff_id ORDER BY total DESC LIMIT ' . max(1, min($limit, 500));
 
     return db_rows($sql, $types, $params);
 }
 
 /** Kto zgłasza najwięcej ticketów (zgłaszający użytkownik). */
-function report_by_submitter(?string $from, ?string $to, int $limit = 50): array
+function report_by_submitter(?string $from, ?string $to, int $limit = 50, string $basis = 'closed'): array
 {
     $T = tbl('ticket');
     $U = tbl('user');
+    $dateCol = $basis === 'closed' ? 't.closed' : 't.created';
 
     $types = '';
     $params = [];
@@ -280,7 +285,10 @@ function report_by_submitter(?string $from, ?string $to, int $limit = 50): array
             FROM $T t
             LEFT JOIN $U u ON u.id = t.user_id
             WHERE 1=1 ";
-    $sql .= reports_date_where($from, $to, $types, $params);
+    if ($basis === 'closed') {
+        $sql .= ' AND t.closed IS NOT NULL ';
+    }
+    $sql .= reports_range($dateCol, $from, $to, $types, $params);
     $sql .= ' GROUP BY u.id ORDER BY total DESC LIMIT ' . max(1, min($limit, 500));
 
     return db_rows($sql, $types, $params);
@@ -880,6 +888,77 @@ function report_priority_tickets(array $priorityIds, ?string $from, ?string $to,
 }
 
 /**
+ * Pierwsze odpowiedzi per agent, zakotwiczone na dacie samej ODPOWIEDZI —
+ * NIE na dacie zamknięcia. Ticket może być nadal otwarty. To ta sama zasada
+ * co w mapie cieplnej (report_breakdown, metryka avg_first_response).
+ * Osobna funkcja od report_priority_tickets() (która wymaga zamkniętego
+ * ticketa w zakresie dat) — inaczej "śr. czas 1. odpowiedzi" w Rankingu
+ * priorytetowym liczyłby się z innej populacji ticketów niż w mapie cieplnej
+ * dla tego samego pracownika/działu/zakresu dat, co dawało różne wyniki
+ * między zakładkami Priorytety i Pracownicy mimo identycznych filtrów.
+ */
+function report_priority_first_response_tickets(array $priorityIds, ?string $from, ?string $to,
+                                                 array $deptIds = [], bool $activeOnly = false, int $limit = 6000): array
+{
+    $ps     = schema_priority_source();
+    $priCol = reports_priority_expr($ps);
+    if ($priCol === null) {
+        return [];
+    }
+    $hasCdata = $ps['joinOnTicket'];
+
+    $T  = tbl('ticket');
+    $PR = tbl('ticket_priority');
+    $CD = tbl('ticket__cdata');
+    $U  = tbl('user');
+    $ST = tbl('staff');
+
+    $types = '';
+    $params = [];
+
+    $sql = "SELECT
+                t.number,
+                st.staff_id,
+                TRIM(CONCAT(COALESCE(st.firstname,''),' ',COALESCE(st.lastname,''))) AS agent,
+                st.isactive,
+                " . ($hasCdata ? 'cd.subject' : 'NULL') . " AS subject,
+                u.name AS submitter,
+                t.created AS opened_at,
+                t.closed  AS closed_at,
+                pr.priority_desc AS priority_name,
+                " . reports_first_response_seconds_agg_expr() . " AS first_response_seconds
+            FROM $T t ";
+    if ($hasCdata) {
+        $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
+    }
+    $sql .= " LEFT JOIN $PR pr ON pr.priority_id = $priCol
+              LEFT JOIN $U u   ON u.id = t.user_id
+              LEFT JOIN $ST st ON st.staff_id = t.staff_id "
+         . reports_first_response_join()
+         . " WHERE fr.first_response_at IS NOT NULL AND t.staff_id > 0 ";
+
+    if (!empty($priorityIds)) {
+        $place = implode(',', array_fill(0, count($priorityIds), '?'));
+        $sql .= " AND $priCol IN ($place) ";
+        foreach ($priorityIds as $id) { $types .= 'i'; $params[] = (int) $id; }
+    }
+    if (!empty($deptIds)) {
+        $place = implode(',', array_fill(0, count($deptIds), '?'));
+        $sql .= " AND st.dept_id IN ($place) ";
+        foreach ($deptIds as $id) { $types .= 'i'; $params[] = (int) $id; }
+    }
+    if ($activeOnly) {
+        $sql .= ' AND st.isactive = 1 ';
+    }
+    $sql .= reports_range('fr.first_response_at', $from, $to, $types, $params);
+
+    $limit = max(1, min($limit, 20000));
+    $sql  .= ' ORDER BY first_response_seconds DESC LIMIT ' . $limit;
+
+    return db_rows($sql, $types, $params);
+}
+
+/**
  * Ranking pracowników na priorytetowych zgłoszeniach: dla każdego agenta liczy
  * średni czas 1. odpowiedzi i średni czas rozwiązania, a do KAŻDEJ z tych
  * średnich wskazuje konkretny ticket, który miał najdłuższy czas — żeby było
@@ -892,7 +971,34 @@ function report_priority_tickets(array $priorityIds, ?string $from, ?string $to,
 function report_priority_ranking(array $priorityIds, ?string $from, ?string $to,
                                   array $deptIds = [], bool $activeOnly = false): array
 {
-    $rows = report_priority_tickets($priorityIds, $from, $to, $deptIds, $activeOnly);
+    $rows   = report_priority_tickets($priorityIds, $from, $to, $deptIds, $activeOnly);
+    $frRows = report_priority_first_response_tickets($priorityIds, $from, $to, $deptIds, $activeOnly);
+
+    // Pierwsza odpowiedź liczona OSOBNO, z własnej (szerszej) populacji —
+    // patrz komentarz przy report_priority_first_response_tickets(). Ticket
+    // nadal otwarty, który dostał odpowiedź w zakresie dat, liczy się tutaj,
+    // mimo że nie pojawi się w $rows (tam wymagane jest zamknięcie w zakresie).
+    $frByAgent = [];
+    foreach ($frRows as $r) {
+        if ($r['first_response_seconds'] === null) {
+            continue; // wykluczone jako ⏳ (wznowiony po długiej przerwie) albo brak odpowiedzi
+        }
+        $id = (int) $r['staff_id'];
+        if (!isset($frByAgent[$id])) {
+            $frByAgent[$id] = ['sum' => 0, 'count' => 0, 'max' => null, 'max_ticket' => null];
+        }
+        $sec = (int) $r['first_response_seconds'];
+        $frByAgent[$id]['sum'] += $sec;
+        $frByAgent[$id]['count']++;
+        if ($frByAgent[$id]['max'] === null || $sec > $frByAgent[$id]['max']) {
+            $frByAgent[$id]['max'] = $sec;
+            $frByAgent[$id]['max_ticket'] = [
+                'number' => $r['number'], 'subject' => $r['subject'], 'submitter' => $r['submitter'],
+                'opened_at' => $r['opened_at'], 'closed_at' => $r['closed_at'],
+                'priority_name' => $r['priority_name'], 'seconds' => $sec,
+            ];
+        }
+    }
 
     $agents = [];
     foreach ($rows as $r) {
@@ -903,7 +1009,6 @@ function report_priority_ranking(array $priorityIds, ?string $from, ?string $to,
                 'agent'    => $r['agent'] !== '' ? $r['agent'] : '(bez nazwy)',
                 'isactive' => (int) $r['isactive'],
                 'count'    => 0,
-                'fr_sum'   => 0, 'fr_count'  => 0, 'fr_max'  => null, 'fr_max_ticket'  => null,
                 'res_sum'  => 0, 'res_count' => 0, 'res_max' => null, 'res_max_ticket' => null,
             ];
         }
@@ -912,22 +1017,8 @@ function report_priority_ranking(array $priorityIds, ?string $from, ?string $to,
 
         // Tickety "wznowione po długiej przerwie" (patrz reports_max_resolution_days)
         // liczą się do count() i widać je w pełnej liście (tickets), ale NIE
-        // wliczamy ich do ŻADNEJ średniej czasowej — ani pierwszej odpowiedzi,
-        // ani rozwiązania — inaczej jeden ticket sprzed lat potrafiłby zawyżyć
-        // (albo sztucznie "poprawić") średnią agenta o miesiące.
-        if ($r['first_response_seconds'] !== null && empty($r['resolution_is_outlier'])) {
-            $sec = (int) $r['first_response_seconds'];
-            $a['fr_sum'] += $sec;
-            $a['fr_count']++;
-            if ($a['fr_max'] === null || $sec > $a['fr_max']) {
-                $a['fr_max'] = $sec;
-                $a['fr_max_ticket'] = [
-                    'number' => $r['number'], 'subject' => $r['subject'], 'submitter' => $r['submitter'],
-                    'opened_at' => $r['opened_at'], 'closed_at' => $r['closed_at'],
-                    'priority_name' => $r['priority_name'], 'seconds' => $sec,
-                ];
-            }
-        }
+        // wliczamy ich do średniej czasu rozwiązania — inaczej jeden ticket
+        // sprzed lat potrafiłby zawyżyć średnią agenta o miesiące.
         if ($r['resolution_seconds'] !== null && empty($r['resolution_is_outlier'])) {
             $sec = (int) $r['resolution_seconds'];
             $a['res_sum'] += $sec;
@@ -946,14 +1037,15 @@ function report_priority_ranking(array $priorityIds, ?string $from, ?string $to,
 
     $summary = [];
     foreach ($agents as $a) {
+        $fr = $frByAgent[$a['staff_id']] ?? null;
         $summary[] = [
             'staff_id' => $a['staff_id'],
             'agent'    => $a['agent'],
             'isactive' => $a['isactive'],
             'count'    => $a['count'],
-            'avg_first_response_seconds' => $a['fr_count'] ? (int) round($a['fr_sum'] / $a['fr_count']) : null,
-            'max_first_response_seconds' => $a['fr_max'],
-            'max_first_response_ticket'  => $a['fr_max_ticket'],
+            'avg_first_response_seconds' => ($fr && $fr['count']) ? (int) round($fr['sum'] / $fr['count']) : null,
+            'max_first_response_seconds' => $fr['max'] ?? null,
+            'max_first_response_ticket'  => $fr['max_ticket'] ?? null,
             'avg_resolution_seconds'     => $a['res_count'] ? (int) round($a['res_sum'] / $a['res_count']) : null,
             'max_resolution_seconds'     => $a['res_max'],
             'max_resolution_ticket'      => $a['res_max_ticket'],
