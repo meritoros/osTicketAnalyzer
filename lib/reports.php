@@ -926,7 +926,12 @@ function report_priority_first_response_tickets(array $priorityIds, ?string $fro
                 t.created AS opened_at,
                 t.closed  AS closed_at,
                 pr.priority_desc AS priority_name,
-                " . reports_first_response_seconds_agg_expr() . " AS first_response_seconds
+                " . reports_first_response_seconds_agg_expr() . " AS first_response_seconds,
+                CASE WHEN t.closed IS NOT NULL
+                     THEN TIMESTAMPDIFF(SECOND, t.created, t.closed)
+                     ELSE NULL END AS resolution_seconds,
+                CASE WHEN t.closed IS NOT NULL THEN " . reports_resolution_outlier_expr() . "
+                     ELSE 0 END AS resolution_is_outlier
             FROM $T t ";
     if ($hasCdata) {
         $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
@@ -967,6 +972,11 @@ function report_priority_first_response_tickets(array $priorityIds, ?string $fro
  *
  * Zwraca ['summary' => [...ranking...], 'tickets' => [...surowe wiersze...]]
  * — 'tickets' służy do rozwinięcia pełnej listy danego agenta na froncie.
+ * Zawiera UNIĘ dwóch populacji (zamknięte w zakresie + odpowiedziane
+ * w zakresie) — inaczej ticket, który wszedł tylko do średniej 1. odpowiedzi
+ * (bo np. zamknął się już po końcu zakresu dat), byłby niewidoczny na liście,
+ * mimo że to jego czas odpowiedzi wpływa na pokazaną średnią — wyglądałoby
+ * to jak błąd ("skąd ta liczba, skoro na liście jest inny ticket").
  */
 function report_priority_ranking(array $priorityIds, ?string $from, ?string $to,
                                   array $deptIds = [], bool $activeOnly = false): array
@@ -1055,7 +1065,22 @@ function report_priority_ranking(array $priorityIds, ?string $from, ?string $to,
         return ($y['avg_resolution_seconds'] ?? -1) <=> ($x['avg_resolution_seconds'] ?? -1);
     });
 
-    return ['summary' => $summary, 'tickets' => $rows];
+    // Unia obu populacji do drążenia (patrz docblock wyżej) — tickety już
+    // obecne w $rows mają pierwszeństwo (mają kompletne dane rozwiązania).
+    $byNumber = [];
+    foreach ($rows as $r) {
+        $byNumber[$r['number']] = $r;
+    }
+    foreach ($frRows as $r) {
+        if ($r['first_response_seconds'] === null) {
+            continue;
+        }
+        if (!isset($byNumber[$r['number']])) {
+            $byNumber[$r['number']] = $r;
+        }
+    }
+
+    return ['summary' => $summary, 'tickets' => array_values($byNumber)];
 }
 
 // ---------------------------------------------------------------------------

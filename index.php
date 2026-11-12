@@ -225,7 +225,7 @@ $assetVer = static function (string $rel): string {
                             <h3 id="pr-detail-title">Tickety pracownika</h3>
                             <button type="button" class="secondary" id="pr-detail-close">Zwiń</button>
                         </div>
-                        <p class="section-hint">Posortowane od najdłuższego czasu rozwiązania — wiersz zaznaczony na czerwono to ten, który najbardziej zawyżył średnią.</p>
+                        <p class="section-hint">Posortowane od najdłuższego czasu rozwiązania — wiersz zaznaczony na czerwono to ten, który najbardziej zawyżył średnią. Lista obejmuje też tickety, które weszły tylko do średniej 1. odpowiedzi (np. zamknęły się już po końcu wybranego zakresu dat), dlatego może być dłuższa niż liczba w kolumnie „Ticketów" — ta kolumna liczy tylko tickety zamknięte w zakresie.</p>
                         <div class="table-scroll">
                             <table class="grid" id="pr-detail-table">
                                 <thead>
