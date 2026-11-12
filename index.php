@@ -188,6 +188,10 @@ $assetVer = static function (string $rel): string {
                         Tickety wznowione po bardzo długiej przerwie (np. stara sprawa z poprzednich lat, do której
                         klient wraca z nowym, niezwiązanym pytaniem) są oznaczone ikoną ⏳ i <strong>pominięte
                         w uśrednieniach</strong>, żeby nie zawyżały statystyk o lata — nadal widać je na liście.
+                        Ikona 🔁 oznacza coś subtelniejszego: szybka pierwsza odpowiedź, ale długa przerwa przed
+                        faktycznym zamknięciem (np. ticket wrócił po kilku dniach z wewnętrzną notatką o fakturowaniu)
+                        — to tylko podpowiedź „sprawdź historię w osTickecie", czas nadal liczy się normalnie
+                        do średniej.
                     </p>
                     <div class="bd-controls">
                         <div class="field">

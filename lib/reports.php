@@ -109,6 +109,35 @@ function reports_resolution_outlier_expr(): string
 }
 
 /**
+ * Sygnał „szybka odpowiedź, potem długa przerwa przed zamknięciem" — ten
+ * sam wzorzec co w Kontroli jakości (tam z suwakiem ustawianym przez
+ * użytkownika), tu ze stałymi, rozsądnymi progami (odpowiedź <= 60 min,
+ * przerwa >= 24h), żeby pokazać ostrzeżenie wszędzie tam, gdzie widać czas
+ * rozwiązania — nie tylko w dedykowanej zakładce. Nie wymaga wykrywania
+ * zdarzeń "ponowne otwarcie" w bazie (to się nie udało u części klientów) —
+ * liczy się wyłącznie z dat, które już mamy. Przykład: pracownik odpowiada
+ * w 4 minuty i zamyka, kolega dopisuje notatkę o fakturowaniu 3 dni później,
+ * ticket wraca do obsługi i zamyka się ponownie — "czas rozwiązania" wygląda
+ * na kilka dni, choć realna praca trwała kilka minut. To ostrzeżenie ma dać
+ * znać "sprawdź historię tego ticketa w osTickecie", bez automatycznego
+ * wykluczania z żadnej statystyki (w przeciwieństwie do progu ⏳ powyżej).
+ */
+function reports_possible_reopen_expr(): string
+{
+    return "(CASE WHEN fr.first_response_at IS NOT NULL AND t.closed IS NOT NULL
+                   AND TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) <= 3600
+                   AND TIMESTAMPDIFF(SECOND, fr.first_response_at, t.closed) >= 86400
+                   THEN 1 ELSE 0 END)";
+}
+
+/** Surowy odstęp (sekundy) między pierwszą odpowiedzią a zamknięciem — do podpowiedzi przy ostrzeżeniu wyżej. */
+function reports_gap_seconds_expr(): string
+{
+    return '(CASE WHEN fr.first_response_at IS NOT NULL AND t.closed IS NOT NULL
+                   THEN TIMESTAMPDIFF(SECOND, fr.first_response_at, t.closed) END)';
+}
+
+/**
  * Wyrażenie SQL czasu 1. odpowiedzi (sekundy) do UŚREDNIEŃ — zwraca NULL dla
  * ticketów, których faktyczne zamknięcie przekracza próg „wznowiony po
  * długiej przerwie" (ta sama flaga ⏳ co przy czasie rozwiązania). Decyzja
@@ -174,7 +203,9 @@ function report_high_priority_closed(array $priorityIds, ?string $from, ?string 
                      ELSE NULL END                 AS resolution_seconds,
                 CASE WHEN t.closed IS NOT NULL THEN " . reports_resolution_outlier_expr() . "
                      ELSE 0 END                    AS resolution_is_outlier,
-                CASE WHEN t.closed IS NOT NULL THEN 1 ELSE 0 END AS is_closed
+                CASE WHEN t.closed IS NOT NULL THEN 1 ELSE 0 END AS is_closed,
+                " . reports_possible_reopen_expr() . " AS possible_reopen,
+                " . reports_gap_seconds_expr() . " AS gap_seconds
              FROM $T t
              JOIN $S s ON s.id = t.status_id ";
 
@@ -855,7 +886,9 @@ function report_priority_tickets(array $priorityIds, ?string $from, ?string $to,
                 CASE WHEN fr.first_response_at IS NOT NULL
                      THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) ELSE NULL END AS first_response_seconds,
                 TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds,
-                " . reports_resolution_outlier_expr() . " AS resolution_is_outlier
+                " . reports_resolution_outlier_expr() . " AS resolution_is_outlier,
+                " . reports_possible_reopen_expr() . " AS possible_reopen,
+                " . reports_gap_seconds_expr() . " AS gap_seconds
             FROM $T t ";
     if ($hasCdata) {
         $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
@@ -931,7 +964,9 @@ function report_priority_first_response_tickets(array $priorityIds, ?string $fro
                      THEN TIMESTAMPDIFF(SECOND, t.created, t.closed)
                      ELSE NULL END AS resolution_seconds,
                 CASE WHEN t.closed IS NOT NULL THEN " . reports_resolution_outlier_expr() . "
-                     ELSE 0 END AS resolution_is_outlier
+                     ELSE 0 END AS resolution_is_outlier,
+                " . reports_possible_reopen_expr() . " AS possible_reopen,
+                " . reports_gap_seconds_expr() . " AS gap_seconds
             FROM $T t ";
     if ($hasCdata) {
         $sql .= " LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id ";
@@ -1181,7 +1216,9 @@ function report_ratings_detail(int $rating, ?string $from, ?string $to, array $p
                 CASE WHEN fr.first_response_at IS NOT NULL
                      THEN TIMESTAMPDIFF(SECOND, t.created, fr.first_response_at) ELSE NULL END AS first_response_seconds,
                 TIMESTAMPDIFF(SECOND, t.created, t.closed) AS resolution_seconds,
-                " . reports_resolution_outlier_expr() . " AS resolution_is_outlier
+                " . reports_resolution_outlier_expr() . " AS resolution_is_outlier,
+                " . reports_possible_reopen_expr() . " AS possible_reopen,
+                " . reports_gap_seconds_expr() . " AS gap_seconds
             FROM $T t
             LEFT JOIN $CD cd ON cd.ticket_id = t.ticket_id
             LEFT JOIN $U u   ON u.id = t.user_id

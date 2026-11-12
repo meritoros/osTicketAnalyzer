@@ -128,6 +128,17 @@ Pulpit jest podzielony na zakładki: Przegląd / Priorytety / Pracownicy / Oceny
 
 ## Uwagi
 
+- **Ikona 🔁 — "sprawdź historię w osTickecie".** Oddzielna od ⏳. Pojawia się
+  przy czasie rozwiązania (raport główny, Ranking priorytetowy i jego
+  rozwinięcie, szczegóły ocen), gdy pierwsza odpowiedź była szybka (≤1h), ale
+  do faktycznego zamknięcia minęło potem ≥24h — typowy wzorzec "ticket wrócił
+  po kilku dniach z wewnętrzną notatką" (np. dopisanie do fakturowania), a nie
+  prawdziwie długiej obsługi. W przeciwieństwie do ⏳ to tylko podpowiedź —
+  NIE wyklucza ticketa z żadnej średniej (próg ⏳/14 dni to zupełnie inny,
+  poważniejszy przypadek: ticket sprzed lat wskrzeszony nową, niezwiązaną
+  sprawą). Liczy się wyłącznie z dat, które już mamy (`reports_possible_reopen_expr()`
+  w `lib/reports.php`) — nie wymaga wykrywania zdarzeń "ponowne otwarcie"
+  w bazie, które bywa niedostępne.
 - **Spójność między zakładkami Priorytety i Pracownicy.** Te zakładki potrafiły
   pokazywać różne liczby dla tego samego pracownika/zakresu dat mimo pozornie
   identycznych filtrów — przyczyny i poprawki:

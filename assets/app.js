@@ -235,6 +235,17 @@ function durBadge(seconds, kind, isOutlier) {
     return `<span class="dur dur-${kind}">${esc(fmtDuration(seconds))}</span>${badge}`;
 }
 
+// Sygnał "szybka pierwsza odpowiedź, potem długa przerwa przed zamknięciem"
+// — ticket mógł zostać wznowiony (np. wewnętrzna notatka kilka dni później),
+// a czas rozwiązania wygląda na dłuższy, niż realnie trwała obsługa. Nie
+// zmienia żadnej statystyki — to tylko podpowiedź, żeby sprawdzić historię
+// ticketa w osTickecie.
+function reopenHintBadge(possibleReopen, gapSeconds) {
+    if (!possibleReopen) return '';
+    const gap = esc(fmtDuration(gapSeconds));
+    return ` <span class="dur-outlier-flag" title="Szybka pierwsza odpowiedź, ale długa przerwa (${gap}) przed zamknięciem — ticket mógł zostać wznowiony (np. notatka wewnętrzna kilka dni później). Sprawdź historię w osTickecie.">🔁</span>`;
+}
+
 function esc(v) {
     return String(v ?? '').replace(/[&<>"]/g, (c) =>
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -298,7 +309,7 @@ async function loadMain() {
                 <td>${esc(fmtDateTime(r.first_response_at))}</td>
                 <td>${durBadge(r.first_response_seconds, 'fr')}</td>
                 <td>${Number(r.is_closed) === 1 ? esc(fmtDateTime(r.closed_at)) : '<span class="muted">nadal otwarty</span>'}</td>
-                <td>${durBadge(r.resolution_seconds, 'res', r.resolution_is_outlier)}</td>
+                <td>${durBadge(r.resolution_seconds, 'res', r.resolution_is_outlier)}${reopenHintBadge(r.possible_reopen, r.gap_seconds)}</td>
             </tr>`).join('');
     } catch (e) {
         if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
@@ -949,7 +960,7 @@ function openAgentDrilldown(staffId, agentName, jumpToNumber) {
                 <td>${esc(fmtDateTime(r.opened_at))}</td>
                 <td>${durBadge(r.first_response_seconds, 'fr')}</td>
                 <td>${esc(fmtDateTime(r.closed_at))}</td>
-                <td>${durBadge(r.resolution_seconds, 'res', r.resolution_is_outlier)}</td>
+                <td>${durBadge(r.resolution_seconds, 'res', r.resolution_is_outlier)}${reopenHintBadge(r.possible_reopen, r.gap_seconds)}</td>
             </tr>`;
         }).join('');
     }
@@ -1042,7 +1053,7 @@ async function loadRatingDetail(rating) {
                 <td>${esc(fmtDateTime(r.opened_at))}</td>
                 <td>${durBadge(r.first_response_seconds, 'fr')}</td>
                 <td>${esc(fmtDateTime(r.closed_at))}</td>
-                <td>${durBadge(r.resolution_seconds, 'res', r.resolution_is_outlier)}</td>
+                <td>${durBadge(r.resolution_seconds, 'res', r.resolution_is_outlier)}${reopenHintBadge(r.possible_reopen, r.gap_seconds)}</td>
             </tr>`).join('');
     } catch (e) {
         if (MODE === 'prompt' && e.status >= 400) return openCredsModal(e.message);
